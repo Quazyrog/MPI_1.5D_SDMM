@@ -12,11 +12,12 @@ find_package(spdlog REQUIRED)
 
 add_executable(generator generator_main.cpp
         densematgen.cpp densematgen.h
-        commons.hpp)
+        Commons.hpp SparseMatrix.cpp SparseMatrix.hpp)
 target_compile_options(generator PUBLIC -std=c++14  -g3 -Wall -O0)
 
-add_executable(matrixmul matrixmul_main.cpp
-        commons.hpp
+add_executable(matrixmul Main.cpp
+        Commons.hpp
+        SparseMatrix.cpp SparseMatrix.hpp
         densematgen.cpp densematgen.h
         )
 target_compile_definitions(matrixmul PRIVATE -DSPDLOG_COMPILED_LIB)

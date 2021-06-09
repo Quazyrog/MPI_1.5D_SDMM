@@ -1,13 +1,13 @@
-#ifndef ZADANIE__COMMONS_HPP
-#define ZADANIE__COMMONS_HPP
+#ifndef COMMONS_HPP
+#define COMMONS_HPP
 
 #include <filesystem>
 #include <optional>
 #include <fmt/format.h>
 
-int MASTER_WORLD_RANK = 0;
+static constexpr int COORDINATOR_WORLD_RANK = 0;
 
-struct CommandLineOptions
+struct ProgramOptions
 {
     enum Algorithm { D15_COL_A, D15_INNER_ABC };
 
@@ -19,6 +19,8 @@ struct CommandLineOptions
 
     bool print_result = false;
     std::optional<double> print_ge_count;
+
+    spdlog::level::level_enum stderr_log_level;
 };
 
 
@@ -50,4 +52,25 @@ public:
 };
 
 
-#endif //ZADANIE__COMMONS_HPP
+class IOError: public Error
+{
+protected:
+    std::filesystem::path file_name_;
+
+    using Error::Error;
+
+public:
+    template<class ...Args>
+    explicit IOError(std::string_view format, Args... args):
+        Error("IOError", format, std::forward<Args>(args)...)
+    {}
+
+    const auto &file_name() const
+    { return file_name_; }
+    void set_file_name(std::filesystem::path fn)
+    { file_name_ = std::move(fn); }
+};
+
+
+
+#endif //COMMONS_HPP
