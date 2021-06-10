@@ -3,9 +3,11 @@
 
 #include <filesystem>
 #include <optional>
+#include <algorithm>
 #include <fmt/format.h>
 
 static constexpr int COORDINATOR_WORLD_RANK = 0;
+extern int ProcessRank, NumberOfProcesses;
 
 struct ProgramOptions
 {
@@ -21,6 +23,34 @@ struct ProgramOptions
     std::optional<double> print_ge_count;
 
     spdlog::level::level_enum stderr_log_level;
+};
+
+
+class DataDistribution1D
+{
+    size_t base_chunk_size_;
+    size_t remainder_;
+
+public:
+    DataDistribution1D(size_t size, size_t parts_number)
+    {
+        base_chunk_size_ = size / parts_number;
+        remainder_ = size - parts_number * base_chunk_size_;
+    }
+
+    inline size_t offset(size_t part) const noexcept
+    {
+        return part * base_chunk_size_ + std::min(part, remainder_);
+    }
+
+    inline size_t part(size_t index) const noexcept
+    {
+        auto large_parts_before_index = index / (base_chunk_size_ + 1);
+        if (large_parts_before_index < remainder_)
+            return large_parts_before_index;
+        index -= remainder_ * (base_chunk_size_ + 1);
+        return remainder_ + index / base_chunk_size_;
+    }
 };
 
 
@@ -72,5 +102,28 @@ public:
 };
 
 
+namespace Tags {
+enum MessageTag {
+    SPARSE_OFFSETS_ARRAY,
+    SPARSE_INDICES_ARRAY,
+    SPARSE_VALUES_ARRAY,
+};
+}
+
+template<class T>
+std::string VectorToString(const std::vector<T> &vec)
+{
+    std::stringstream s;
+    s << "[";
+    bool comma = false;
+    for (const auto &v: vec) {
+        if (comma)
+            s << ", ";
+        s << v;
+        comma = true;
+    }
+    s << "]";
+    return s.str();
+}
 
 #endif //COMMONS_HPP

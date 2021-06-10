@@ -19,7 +19,7 @@ add_executable(matrixmul Main.cpp
         Commons.hpp
         SparseMatrix.cpp SparseMatrix.hpp
         densematgen.cpp densematgen.h
-        )
+        MatrixSlice.hpp)
 target_compile_definitions(matrixmul PRIVATE -DSPDLOG_COMPILED_LIB)
 target_include_directories(matrixmul PRIVATE ${MPI_INCLUDE_PATH})
 target_include_directories(matrixmul BEFORE PRIVATE external/fmt/include external/spdlog/include)

@@ -96,12 +96,98 @@ void SetupLogging()
 }
 
 
+/**
+ * Prepare initial distribution of matrices A and B among processes.
+ * @return
+ */
+auto InitializeMatrices()
+{
+    long a_mat_size[2];
+    SparseMatrixData a_part;
+    spdlog::info("Starting initial matrix propagation");
+
+    // Initialize A
+    if (ProcessRank == COORDINATOR_WORLD_RANK) {
+        // Prepare A data as triples
+        std::ifstream s{Options.sparse_matrix_file};
+        auto [mat_rows, mat_cols, mat_data] = SparseMatrixData::ReadCSRFile(s);
+        std::sort(mat_data.begin(), mat_data.end(), CSCOrder{});
+        spdlog::info("Read {} entries from CSR file '{}'", mat_data.size(), Options.sparse_matrix_file.string());
+
+        // Broadcast A dimension
+        spdlog::debug("Broadcasting matrix A size: {}x{}", mat_rows, mat_cols);
+        a_mat_size[0] = static_cast<long>(mat_rows);
+        a_mat_size[1] = static_cast<long>(mat_cols);
+        MPI_Bcast(a_mat_size, 2, MPI_LONG, COORDINATOR_WORLD_RANK, MPI_COMM_WORLD);
+
+        // Distribute A columns-wise
+        DataDistribution1D a_distribution(mat_cols, NumberOfProcesses);
+        for (int proc = 0; proc < NumberOfProcesses; ++proc) {
+            // Find the range of triples to store in process proc
+            auto first_entry = std::lower_bound(
+                mat_data.begin(), mat_data.end(),
+                SparseEntry{-1, static_cast<long>(a_distribution.offset(proc)), 0},
+                CSCOrder{});
+            auto last_entry = std::lower_bound(
+                mat_data.begin(), mat_data.end(),
+                SparseEntry{-1, static_cast<long>(a_distribution.offset(proc + 1)), 0},
+                CSCOrder{});
+
+            // Construct and send the matrix in CSR representation
+            auto mat_part = SparseMatrixData::BuildCSR(static_cast<long>(mat_rows), static_cast<long>(mat_cols),
+                                                       last_entry - first_entry, &(*first_entry));
+            if (proc != ProcessRank) {
+                MPI_Send(mat_part.offsets.data(), static_cast<int>(mat_part.offsets.size()), MPI_LONG, proc,
+                         Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD);
+                MPI_Send(mat_part.indices.data(), static_cast<int>(mat_part.indices.size()), MPI_LONG, proc,
+                         Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD);
+                MPI_Send(mat_part.values.data(), static_cast<int>(mat_part.values.size()), MPI_DOUBLE, proc,
+                         Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD);
+                spdlog::debug("Sent {} elements to {} process", mat_part.values.data(), proc);
+            } else {
+                spdlog::debug("Storing {} elements in my A matrix part", mat_part.values.data());
+                a_part = std::move(mat_part);
+            }
+        }
+
+        // Done
+        spdlog::info("Initial matrix propagation finished for A");
+
+    } else {
+        // Receive A matrix size and initialize CSR metadata
+        MPI_Bcast(a_mat_size, 2, MPI_LONG, COORDINATOR_WORLD_RANK, MPI_COMM_WORLD);
+        spdlog::debug("Received A size {}x{}", a_mat_size[0], a_mat_size[1]);
+        a_part.rows = a_mat_size[0];
+        a_part.columns = a_mat_size[1];
+        a_part.offsets.resize(a_part.rows + 1);
+
+        // Allocate and receive my A part in CSR form
+        MPI_Recv(a_part.offsets.data(), static_cast<int>(a_part.offsets.size()), MPI_LONG, COORDINATOR_WORLD_RANK,
+                 Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        spdlog::trace("Received offsets array: {}", VectorToString(a_part.offsets));
+        spdlog::debug("Number of nonzero elements in my part of A is {}", a_part.offsets.back());
+
+        a_part.indices.resize(a_part.offsets.back());
+        MPI_Recv(a_part.indices.data(), static_cast<int>(a_part.indices.size()), MPI_LONG, COORDINATOR_WORLD_RANK,
+                 Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        spdlog::trace("Received indices array: {}", VectorToString(a_part.indices));
+
+        a_part.values.resize(a_part.offsets.back());
+        MPI_Recv(a_part.values.data(), static_cast<int>(a_part.values.size()), MPI_DOUBLE, COORDINATOR_WORLD_RANK,
+                 Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        spdlog::trace("Received values array: {}", VectorToString(a_part.values));
+    }
+    // Now every process holds it's range of columns of A without replication
+
+    return a_part;
+}
+
+
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &NumberOfProcesses);
     MPI_Comm_rank(MPI_COMM_WORLD, &ProcessRank);
-    spdlog::info("Hello from process {}/{}", ProcessRank, NumberOfProcesses);
 
     try {
         Options = ParseCommandLineOptions(argc - 1, argv + 1);
@@ -111,15 +197,16 @@ int main(int argc, char **argv)
     }
     SetupLogging();
 
-    SparseMatrix a;
+
     try {
-        std::ifstream s{Options.sparse_matrix_file};
-        a = SparseMatrix::Read(s);
+        InitializeMatrices();
     } catch (CSRReadError &e) {
         spdlog::critical("Unable to read CSR file {} with A matrix: {}", Options.sparse_matrix_file.string(),
                          e.message());
+        MPI_Abort(MPI_COMM_WORLD, 1);
         return 1;
     }
 
+    MPI_Finalize();
     return 0;
 }
