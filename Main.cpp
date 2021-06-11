@@ -191,12 +191,13 @@ int main(int argc, char **argv)
         spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
     }
 
-    std::shared_ptr<MatrixPoweringAlgorithm> algorithm;
+    MatrixPoweringAlgorithm *algorithm;
     try {
         if (Options.used_algorithm == ProgramOptions::D15_COL_A) {
             ColASettings settings;
             settings.dense_matrix_seed = Options.dense_matrix_seed;
-            algorithm = std::make_shared<PoweringColAAlgorithm>(settings);
+            settings.c_param = Options.replication_group_size;
+            algorithm = new PoweringColAAlgorithm(settings);
         } else {
             throw NotImplementedError("Algorithm not implemented");
         }
@@ -210,6 +211,9 @@ int main(int argc, char **argv)
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
+    algorithm->replicate();
+
+    delete algorithm;
     MPI_Finalize();
     return 0;
 }

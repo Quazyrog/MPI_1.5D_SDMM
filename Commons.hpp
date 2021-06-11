@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <optional>
 #include <algorithm>
+#include <mpi.h>
 #include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
@@ -118,6 +119,50 @@ public:
     explicit NotImplementedError(std::string_view format, Args... args):
         Error("NotImplementedError", format, std::forward<Args>(args)...)
     {}
+};
+
+class MPIError: public Error
+{
+    int code_;
+    std::string function_name_;
+
+public:
+    static std::string ErrorString(int code)
+    {
+        char str[MPI_MAX_ERROR_STRING + 1];
+        int len = 0;
+        auto res = MPI_Error_string(code, str, &len);
+        if (res != MPI_SUCCESS)
+            return "(invalid error code)";
+        str[len] = 0;
+        return str;
+    }
+
+    template<class ...Args>
+    explicit MPIError(std::string_view format, Args... args):
+        Error("MPIError", format, std::forward<Args>(args)...)
+    {}
+
+    explicit MPIError(int error_code, const char *call):
+        Error("MPIError", "MPI call {} returned error #{}: {}", call, error_code, ErrorString(error_code)),
+        function_name_(call),
+        code_(error_code)
+    {}
+
+    [[nodiscard]] std::string error_string() const
+    {
+        return ErrorString(code_);
+    }
+
+    int error_code() const noexcept
+    {
+        return code_;
+    }
+
+    const std::string &function_name() const noexcept
+    {
+        return function_name_;
+    }
 };
 
 

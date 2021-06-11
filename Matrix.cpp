@@ -98,3 +98,16 @@ SparseMatrixData SparseMatrixData::BuildCSR(long rows, long cols, size_t count, 
 
     return matrix;
 }
+
+void SparseEntry::InitMPIDataType(MPI_Datatype &type)
+{
+    static const int block_lengths[3] = {1, 1, 1};
+    static const MPI_Aint offsets[3] = {
+        offsetof(SparseEntry, row),
+        offsetof(SparseEntry, column),
+        offsetof(SparseEntry, value)
+    };
+    MPI_Datatype types[3] = {MPI_LONG, MPI_LONG, MPI_DOUBLE};
+    MPI_Type_create_struct(3, block_lengths, offsets, types, &type);
+    MPI_Type_commit(&type);
+}

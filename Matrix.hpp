@@ -10,6 +10,8 @@ struct SparseEntry
 {
     long row, column;
     double value;
+
+    static void InitMPIDataType(MPI_Datatype &type);
 };
 
 struct CSROrder
@@ -31,6 +33,16 @@ struct SparseMatrixData
     std::vector<long> offsets;
     std::vector<long> indices;
     std::vector<double> values;
+
+    template<class Function>
+    void in_order_foreach_nonzero(const Function &function) {
+        long row = 0;
+        for (size_t i = 0; i < values.size(); ++i) {
+            while (i >= offsets[row + 1])
+                ++row;
+            function(row, indices[i], values[i]);
+        }
+    }
 
     static std::tuple<size_t, size_t, std::vector<SparseEntry>> ReadCSRFile(std::istream &stream);
     static SparseMatrixData BuildCSC(long rows, long cols, size_t count, SparseEntry *data);
