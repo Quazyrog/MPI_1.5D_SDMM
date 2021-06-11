@@ -1,4 +1,4 @@
-#include "SparseMatrix.hpp"
+#include "Matrix.hpp"
 
 std::tuple<size_t, size_t, std::vector<SparseEntry>> SparseMatrixData::ReadCSRFile(std::istream &stream)
 {

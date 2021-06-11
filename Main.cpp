@@ -6,7 +6,8 @@
 #include <spdlog/sinks/stdout_sinks.h>
 #include <fstream>
 #include "Commons.hpp"
-#include "SparseMatrix.hpp"
+#include "Matrix.hpp"
+#include "densematgen.h"
 
 int ProcessRank, NumberOfProcesses;
 ProgramOptions Options;
@@ -96,10 +97,6 @@ void SetupLogging()
 }
 
 
-/**
- * Prepare initial distribution of matrices A and B among processes.
- * @return
- */
 auto InitializeMatrices()
 {
     long a_mat_size[2];
@@ -113,6 +110,10 @@ auto InitializeMatrices()
         auto [mat_rows, mat_cols, mat_data] = SparseMatrixData::ReadCSRFile(s);
         std::sort(mat_data.begin(), mat_data.end(), CSCOrder{});
         spdlog::info("Read {} entries from CSR file '{}'", mat_data.size(), Options.sparse_matrix_file.string());
+        if (mat_rows != mat_cols) {
+            spdlog::critical("Matrix A is not square!");
+            throw ValueError("Matrix A has non-square size {}x{}", mat_rows, mat_cols);
+        }
 
         // Broadcast A dimension
         spdlog::debug("Broadcasting matrix A size: {}x{}", mat_rows, mat_cols);
@@ -143,9 +144,9 @@ auto InitializeMatrices()
                          Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD);
                 MPI_Send(mat_part.values.data(), static_cast<int>(mat_part.values.size()), MPI_DOUBLE, proc,
                          Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD);
-                spdlog::debug("Sent {} elements to {} process", mat_part.values.data(), proc);
+                spdlog::debug("Sent {} elements to {} process", mat_part.values.size(), proc);
             } else {
-                spdlog::debug("Storing {} elements in my A matrix part", mat_part.values.data());
+                spdlog::debug("Storing {} elements in my A matrix part", mat_part.values.size());
                 a_part = std::move(mat_part);
             }
         }
@@ -179,7 +180,19 @@ auto InitializeMatrices()
     }
     // Now every process holds it's range of columns of A without replication
 
-    return a_part;
+    // Generate my B part
+    DataDistribution1D b_distribution(a_part.rows, NumberOfProcesses);
+    const auto first_column = static_cast<long>(b_distribution.offset(ProcessRank));
+    const auto b_part_cols = static_cast<long>(b_distribution.offset(ProcessRank + 1) - first_column);
+    const auto b_part_rows = a_part.columns;
+    spdlog::info("Generating my B part of size {}x{}", b_part_rows, b_part_cols);
+    DenseMatrix b_part(b_part_rows, b_part_cols);
+    const auto seed = Options.dense_matrix_seed;
+    b_part.in_order_foreach([first_column, seed](auto r, auto c, auto &v) {
+        v = generate_double(seed, r, first_column + c);
+    });
+
+    return std::tuple{a_part, b_part};
 }
 
 
@@ -196,13 +209,20 @@ int main(int argc, char **argv)
         return 1;
     }
     SetupLogging();
-
+    if (ProcessRank == COORDINATOR_WORLD_RANK) {
+        spdlog::info("Built: {} {}", __DATE__, __TIME__);
+        spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
+    }
 
     try {
         InitializeMatrices();
     } catch (CSRReadError &e) {
         spdlog::critical("Unable to read CSR file {} with A matrix: {}", Options.sparse_matrix_file.string(),
                          e.message());
+        MPI_Abort(MPI_COMM_WORLD, 1);
+        return 1;
+    } catch (std::exception &e) {
+        spdlog::critical("Aborting due to an error: ", e.what());
         MPI_Abort(MPI_COMM_WORLD, 1);
         return 1;
     }

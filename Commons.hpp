@@ -101,6 +101,15 @@ public:
     { file_name_ = std::move(fn); }
 };
 
+class ValueError: public Error
+{
+public:
+    template<class ...Args>
+    explicit ValueError(std::string_view format, Args... args):
+        Error("ValueError", format, std::forward<Args>(args)...)
+    {}
+};
+
 
 namespace Tags {
 enum MessageTag {
