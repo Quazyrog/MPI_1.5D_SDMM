@@ -5,6 +5,7 @@
 #include <optional>
 #include <algorithm>
 #include <fmt/format.h>
+#include <spdlog/spdlog.h>
 
 static constexpr int COORDINATOR_WORLD_RANK = 0;
 extern int ProcessRank, NumberOfProcesses;
@@ -22,7 +23,7 @@ struct ProgramOptions
     bool print_result = false;
     std::optional<double> print_ge_count;
 
-    spdlog::level::level_enum stderr_log_level;
+    spdlog::level::level_enum stderr_log_level = spdlog::level::level_enum::info;
 };
 
 
@@ -64,7 +65,7 @@ protected:
     Error(const char *class_name, std::string_view format, Args... args):
         _message(fmt::format(format, std::forward<Args>(args)...))
     {
-            _what = class_name + _message;
+            _what = class_name + (": " + _message);
     }
 
 public:
@@ -107,6 +108,15 @@ public:
     template<class ...Args>
     explicit ValueError(std::string_view format, Args... args):
         Error("ValueError", format, std::forward<Args>(args)...)
+    {}
+};
+
+class NotImplementedError: public Error
+{
+public:
+    template<class ...Args>
+    explicit NotImplementedError(std::string_view format, Args... args):
+        Error("NotImplementedError", format, std::forward<Args>(args)...)
     {}
 };
 

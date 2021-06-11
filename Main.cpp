@@ -7,7 +7,8 @@
 #include <fstream>
 #include "Commons.hpp"
 #include "Matrix.hpp"
-#include "densematgen.h"
+#include "MatrixPoweringAlgorithm.hpp"
+#include "PoweringColAAlgorithm.hpp"
 
 int ProcessRank, NumberOfProcesses;
 ProgramOptions Options;
@@ -97,23 +98,21 @@ void SetupLogging()
 }
 
 
-auto InitializeMatrices()
+auto InitializeAlgorithm(MatrixPoweringAlgorithm &algorithm)
 {
     long a_mat_size[2];
     SparseMatrixData a_part;
-    spdlog::info("Starting initial matrix propagation");
 
     // Initialize A
     if (ProcessRank == COORDINATOR_WORLD_RANK) {
+        spdlog::info("Starting initial matrix propagation");
+
         // Prepare A data as triples
         std::ifstream s{Options.sparse_matrix_file};
         auto [mat_rows, mat_cols, mat_data] = SparseMatrixData::ReadCSRFile(s);
-        std::sort(mat_data.begin(), mat_data.end(), CSCOrder{});
         spdlog::info("Read {} entries from CSR file '{}'", mat_data.size(), Options.sparse_matrix_file.string());
-        if (mat_rows != mat_cols) {
-            spdlog::critical("Matrix A is not square!");
-            throw ValueError("Matrix A has non-square size {}x{}", mat_rows, mat_cols);
-        }
+        auto splitter = algorithm.init_splitter(static_cast<long>(mat_rows), static_cast<long>(mat_cols));
+        splitter->assign_matrix_data(static_cast<long>(mat_rows), static_cast<long>(mat_cols), std::move(mat_data));
 
         // Broadcast A dimension
         spdlog::debug("Broadcasting matrix A size: {}x{}", mat_rows, mat_cols);
@@ -121,22 +120,12 @@ auto InitializeMatrices()
         a_mat_size[1] = static_cast<long>(mat_cols);
         MPI_Bcast(a_mat_size, 2, MPI_LONG, COORDINATOR_WORLD_RANK, MPI_COMM_WORLD);
 
-        // Distribute A columns-wise
-        DataDistribution1D a_distribution(mat_cols, NumberOfProcesses);
+        // Distribute the sparse matrix A
         for (int proc = 0; proc < NumberOfProcesses; ++proc) {
-            // Find the range of triples to store in process proc
-            auto first_entry = std::lower_bound(
-                mat_data.begin(), mat_data.end(),
-                SparseEntry{-1, static_cast<long>(a_distribution.offset(proc)), 0},
-                CSCOrder{});
-            auto last_entry = std::lower_bound(
-                mat_data.begin(), mat_data.end(),
-                SparseEntry{-1, static_cast<long>(a_distribution.offset(proc + 1)), 0},
-                CSCOrder{});
-
             // Construct and send the matrix in CSR representation
+            auto [entries, count] = splitter->range_of(proc);
             auto mat_part = SparseMatrixData::BuildCSR(static_cast<long>(mat_rows), static_cast<long>(mat_cols),
-                                                       last_entry - first_entry, &(*first_entry));
+                                                       count, entries);
             if (proc != ProcessRank) {
                 MPI_Send(mat_part.offsets.data(), static_cast<int>(mat_part.offsets.size()), MPI_LONG, proc,
                          Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD);
@@ -178,21 +167,9 @@ auto InitializeMatrices()
                  Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         spdlog::trace("Received values array: {}", VectorToString(a_part.values));
     }
-    // Now every process holds it's range of columns of A without replication
-
-    // Generate my B part
-    DataDistribution1D b_distribution(a_part.rows, NumberOfProcesses);
-    const auto first_column = static_cast<long>(b_distribution.offset(ProcessRank));
-    const auto b_part_cols = static_cast<long>(b_distribution.offset(ProcessRank + 1) - first_column);
-    const auto b_part_rows = a_part.columns;
-    spdlog::info("Generating my B part of size {}x{}", b_part_rows, b_part_cols);
-    DenseMatrix b_part(b_part_rows, b_part_cols);
-    const auto seed = Options.dense_matrix_seed;
-    b_part.in_order_foreach([first_column, seed](auto r, auto c, auto &v) {
-        v = generate_double(seed, r, first_column + c);
-    });
-
-    return std::tuple{a_part, b_part};
+    /* now every process holds it's range of columns of A without replication */
+    algorithm.initialize(std::move(a_part));
+    spdlog::info("Algorithm initialization complete!");
 }
 
 
@@ -214,17 +191,23 @@ int main(int argc, char **argv)
         spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
     }
 
+    std::shared_ptr<MatrixPoweringAlgorithm> algorithm;
     try {
-        InitializeMatrices();
+        if (Options.used_algorithm == ProgramOptions::D15_COL_A) {
+            ColASettings settings;
+            settings.dense_matrix_seed = Options.dense_matrix_seed;
+            algorithm = std::make_shared<PoweringColAAlgorithm>(settings);
+        } else {
+            throw NotImplementedError("Algorithm not implemented");
+        }
+        InitializeAlgorithm(*algorithm);
     } catch (CSRReadError &e) {
         spdlog::critical("Unable to read CSR file {} with A matrix: {}", Options.sparse_matrix_file.string(),
                          e.message());
         MPI_Abort(MPI_COMM_WORLD, 1);
-        return 1;
     } catch (std::exception &e) {
-        spdlog::critical("Aborting due to an error: ", e.what());
+        spdlog::critical("Failed to initialize the algorithm: {}", e.what());
         MPI_Abort(MPI_COMM_WORLD, 1);
-        return 1;
     }
 
     MPI_Finalize();
