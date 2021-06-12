@@ -14,6 +14,8 @@ struct SparseEntry
     static void InitMPIDataType(MPI_Datatype &type);
 };
 
+std::ostream &operator<<(std::ostream&, const SparseEntry &e);
+
 struct CSROrder
 {
     bool operator()(const SparseEntry &a, const SparseEntry &b)
@@ -100,7 +102,7 @@ public:
     void in_order_foreach(Function body)
     {
         for (long col = 0; col < columns_; ++col) {
-            for (long row = 0; row < columns_; ++row)
+            for (long row = 0; row < rows_; ++row)
                 body(row, col, values_[col * rows_ + row]);
         }
     }

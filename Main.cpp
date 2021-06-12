@@ -7,6 +7,7 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <fstream>
 #include <spdlog/sinks/ansicolor_sink.h>
+#include <unistd.h>
 #include "Commons.hpp"
 #include "Matrix.hpp"
 #include "MatrixPoweringAlgorithm.hpp"
@@ -109,7 +110,7 @@ void SetupLogging()
     if (Options.log_file_path.empty())
         default_sink = std::make_shared<spdlog::sinks::stderr_sink_st>();
     else
-        default_sink = std::make_shared<spdlog::sinks::basic_file_sink_st>(Options.log_file_path);
+        default_sink = std::make_shared<spdlog::sinks::basic_file_sink_st>(Options.log_file_path, true);
     default_sink->set_level(Options.stderr_log_level);
     default_sink->set_pattern(pattern);
 
@@ -218,6 +219,7 @@ int main(int argc, char **argv)
     }
     SetupLogging();
     spdlog::info("Built: {} {}", __DATE__, __TIME__);
+    spdlog::info("My PID is {}", getpid());
     spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
 
     double initialization_duration;

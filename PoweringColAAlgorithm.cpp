@@ -145,6 +145,7 @@ void PoweringColAAlgorithm::replicate()
                    combined_triples.data(), all_sizes.data(), all_offsets.data(), triple_data_type,
                    layer);
     spdlog::info("Replication layer {} has {} sparse entries", world2d_my_coords_[1], combined_size);
+    spdlog::trace("Gathered sparse entries: {}", VectorToString(combined_triples));
 
     // Finally construct the A matrix
     assert(combined_size == combined_triples.size());
@@ -255,6 +256,7 @@ std::optional<DenseMatrix> PoweringColAAlgorithm::gather_result()
     MPI_Gatherv(c_.data(), my_send_size, MPI_DOUBLE,
                 result.data(), sizes.data(), offsets.data(), MPI_DOUBLE,
                 COORDINATOR_WORLD_RANK, MPI_COMM_WORLD);
+    spdlog::trace("Sent part of result: {}", VectorToString(c_.data(), c_.data() + my_send_size));
 
     if (ProcessRank == COORDINATOR_WORLD_RANK)
         return DenseMatrix(problem_size_, problem_size_, std::move(result));

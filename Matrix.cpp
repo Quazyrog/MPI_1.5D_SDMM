@@ -120,3 +120,8 @@ void SparseDenseMultiply(const SparseMatrixData &csr_matrix, const DenseMatrix &
         });
     }
 }
+
+std::ostream &operator<<(std::ostream &s, const SparseEntry &e)
+{
+    return s << fmt::format("SparseEntry{{{}, {}, {}}}", e.row, e.column, e.value);
+}
