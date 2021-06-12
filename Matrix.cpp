@@ -1,3 +1,4 @@
+#include <iostream>
 #include "Matrix.hpp"
 
 std::tuple<long, long, std::vector<SparseEntry>> SparseMatrixData::ReadCSRFile(std::istream &stream)
@@ -116,6 +117,10 @@ void SparseDenseMultiply(const SparseMatrixData &csr_matrix, const DenseMatrix &
 {
     for (long dense_column = 0; dense_column < dense_matrix.columns(); ++dense_column) {
         csr_matrix.in_order_foreach_nonzero([&out, &dense_matrix, dense_column](auto r, auto c, auto v) {
+            assert(r < out.rows());
+            assert(dense_column < out.columns());
+            assert(c < dense_matrix.rows());
+            assert(dense_column < dense_matrix.columns());
             out(r, dense_column) += v * dense_matrix(c, dense_column);
         });
     }

@@ -37,28 +37,14 @@ struct SparseMatrixData
     std::vector<double> values;
 
     template<class Function, bool CSR=true>
-    void in_order_foreach_nonzero(const Function &function) {
-        long row = 0;
-        for (size_t i = 0; i < values.size(); ++i) {
-            while (i >= offsets[row + 1])
-                ++row;
-            if constexpr(CSR)
-                function(row, indices[i], values[i]);
-            else
-                function(indices[i], row, values[i]);
-        }
-    }
-
-    template<class Function, bool CSR=true>
     void in_order_foreach_nonzero(const Function &function) const {
-        long row = 0;
-        for (size_t i = 0; i < values.size(); ++i) {
-            while (i >= offsets[row + 1])
-                ++row;
-            if constexpr(CSR)
-                function(row, indices[i], values[i]);
-            else
-                function(indices[i], row, values[i]);
+        for (long row = 0; row < rows; ++row) {
+            for (long entry_index = offsets[row]; entry_index < offsets[row + 1]; ++entry_index) {
+                if (CSR)
+                    function(row, indices[entry_index], values[entry_index]);
+                else
+                    function(indices[entry_index], row, values[entry_index]);
+            }
         }
     }
 
