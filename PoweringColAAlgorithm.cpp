@@ -193,8 +193,7 @@ void PoweringColAAlgorithm::multiply()
 
     // *** MULTIPLY AND ROTATE A ***
     const int steps = NumberOfProcesses / settings_.c_param;
-    if (ProcessRank == COORDINATOR_WORLD_RANK)
-        spdlog::info("Starting multiplication; it will be executed in {} steps", steps);
+    spdlog::info("Starting multiplication; it will be executed in {} steps", steps);
     for (int step = 0; step < steps; ++step) {
         // fixme c == 1
         // Asynchronously send sparse part now...

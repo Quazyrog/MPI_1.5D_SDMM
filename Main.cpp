@@ -4,7 +4,9 @@
 #include <exception>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_sinks.h>
+#include <spdlog/sinks/basic_file_sink.h>
 #include <fstream>
+#include <spdlog/sinks/ansicolor_sink.h>
 #include "Commons.hpp"
 #include "Matrix.hpp"
 #include "MatrixPoweringAlgorithm.hpp"
@@ -68,7 +70,7 @@ ProgramOptions ParseCommandLineOptions(const int argc, char **argv)
         }
     }
 
-    if (auto level = std::getenv("STDERR_VERBOSITY")) {
+    if (auto level = std::getenv("LOG_VERBOSITY")) {
 #define MATRIXMUL_MAIN_CONVERT_LEVEL(level_name) \
     if (strcmp(level, #level_name) == 0) options.stderr_log_level = spdlog::level::level_enum:: level_name
         MATRIXMUL_MAIN_CONVERT_LEVEL(trace);
@@ -79,6 +81,16 @@ ProgramOptions ParseCommandLineOptions(const int argc, char **argv)
         MATRIXMUL_MAIN_CONVERT_LEVEL(critical);
         MATRIXMUL_MAIN_CONVERT_LEVEL(off);
     }
+    if (auto pattern = std::getenv("LOG_FILE_PATTERN")) {
+        std::string log_file = pattern;
+        auto pos = log_file.find('%');
+        if (pos == std::string::npos) {
+            std::cerr << "WARNING: invalid log file name pattern (no % char found)";
+        } else {
+            log_file.replace(pos, 1, std::to_string(ProcessRank));
+            options.log_file_path = log_file;
+        }
+    }
 
     return options;
 }
@@ -86,15 +98,28 @@ ProgramOptions ParseCommandLineOptions(const int argc, char **argv)
 
 void SetupLogging()
 {
-    spdlog::default_logger()->sinks().clear();
-    auto stderr_sink = std::make_shared<spdlog::sinks::stderr_sink_st>();
-    if (ProcessRank == COORDINATOR_WORLD_RANK)
-        stderr_sink->set_pattern(fmt::format("[%Y-%m-%d %H:%M:%S.%e] [master] [%l] :: %v", ProcessRank));
-    else
-        stderr_sink->set_pattern(fmt::format("[%Y-%m-%d %H:%M:%S.%e] [mpi:{:02}] [%l] :: %v", ProcessRank));
     spdlog::set_level(spdlog::level::level_enum::trace);
-    stderr_sink->set_level(Options.stderr_log_level);
-    spdlog::default_logger()->sinks().push_back(stderr_sink);
+    std::string pattern;
+    if (ProcessRank == COORDINATOR_WORLD_RANK)
+        pattern = fmt::format("[%Y-%m-%d %H:%M:%S.%e] [master] [%l] :: %v", ProcessRank);
+    else
+        pattern = fmt::format("[%Y-%m-%d %H:%M:%S.%e] [mpi:{:02}] [%l] :: %v", ProcessRank);
+
+    spdlog::sink_ptr default_sink;
+    if (Options.log_file_path.empty())
+        default_sink = std::make_shared<spdlog::sinks::stderr_sink_st>();
+    else
+        default_sink = std::make_shared<spdlog::sinks::basic_file_sink_st>(Options.log_file_path);
+    default_sink->set_level(Options.stderr_log_level);
+    default_sink->set_pattern(pattern);
+
+    spdlog::default_logger()->sinks().clear();
+    spdlog::default_logger()->sinks().push_back(default_sink);
+    if (ProcessRank == COORDINATOR_WORLD_RANK && !Options.log_file_path.empty()) {
+        auto console_logger = std::make_shared<spdlog::sinks::ansicolor_stderr_sink_st>();
+        console_logger->set_pattern(pattern);
+        spdlog::default_logger()->sinks().push_back(console_logger);
+    }
 }
 
 
@@ -192,10 +217,8 @@ int main(int argc, char **argv)
         return 1;
     }
     SetupLogging();
-    if (ProcessRank == COORDINATOR_WORLD_RANK) {
-        spdlog::info("Built: {} {}", __DATE__, __TIME__);
-        spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
-    }
+    spdlog::info("Built: {} {}", __DATE__, __TIME__);
+    spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
 
     double initialization_duration;
     MatrixPoweringAlgorithm *algorithm;
@@ -214,8 +237,7 @@ int main(int argc, char **argv)
         InitializeAlgorithm(*algorithm);
         MPI_Barrier(MPI_COMM_WORLD);
         initialization_duration = MPI_Wtime() - initialization_duration;
-        if (ProcessRank == COORDINATOR_WORLD_RANK)
-            spdlog::info("Initialization completed in {}ms", RoundWallTime(initialization_duration));
+        spdlog::info("Initialization completed in {}ms", RoundWallTime(initialization_duration));
     } catch (CSRReadError &e) {
         spdlog::critical("Unable to read CSR file {} with A matrix: {}", Options.sparse_matrix_file.string(),
                          e.message());
@@ -230,8 +252,7 @@ int main(int argc, char **argv)
     algorithm->replicate();
     MPI_Barrier(MPI_COMM_WORLD);
     replication_duration = MPI_Wtime() - replication_duration;
-    if (ProcessRank == COORDINATOR_WORLD_RANK)
-        spdlog::info("Replication completed in {}ms", RoundWallTime(replication_duration));
+    spdlog::info("Replication completed in {}ms", RoundWallTime(replication_duration));
 
     // Do the powering
     double multiplication_duration = MPI_Wtime();
@@ -248,8 +269,7 @@ int main(int argc, char **argv)
         MPI_Barrier(MPI_COMM_WORLD);
     }
     multiplication_duration = MPI_Wtime() - multiplication_duration;
-    if (ProcessRank == COORDINATOR_WORLD_RANK)
-        spdlog::info("Multiplication completed in {}ms", RoundWallTime(multiplication_duration));
+    spdlog::info("Multiplication completed in {}ms", RoundWallTime(multiplication_duration));
 
     if (Options.print_result) {
         spdlog::info("Gathering the result matrix");
