@@ -34,13 +34,29 @@ struct SparseMatrixData
     std::vector<long> indices;
     std::vector<double> values;
 
-    template<class Function>
+    template<class Function, bool CSR=true>
     void in_order_foreach_nonzero(const Function &function) {
         long row = 0;
         for (size_t i = 0; i < values.size(); ++i) {
             while (i >= offsets[row + 1])
                 ++row;
-            function(row, indices[i], values[i]);
+            if constexpr(CSR)
+                function(row, indices[i], values[i]);
+            else
+                function(indices[i], row, values[i]);
+        }
+    }
+
+    template<class Function, bool CSR=true>
+    void in_order_foreach_nonzero(const Function &function) const {
+        long row = 0;
+        for (size_t i = 0; i < values.size(); ++i) {
+            while (i >= offsets[row + 1])
+                ++row;
+            if constexpr(CSR)
+                function(row, indices[i], values[i]);
+            else
+                function(indices[i], row, values[i]);
         }
     }
 
@@ -95,6 +111,6 @@ public:
 
 
 void SparseDenseMultiply(const SparseMatrixData &csr_matrix, const DenseMatrix &dense_matrix,
-                         const DenseMatrix &result_accumulator);
+                         DenseMatrix &result_accumulator);
 
 #endif // MATRIX_HPP
