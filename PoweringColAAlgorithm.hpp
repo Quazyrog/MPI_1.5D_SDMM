@@ -21,17 +21,10 @@ class PoweringColAAlgorithm: public MatrixPoweringAlgorithm
     DenseMatrix b_;
     DenseMatrix c_;
 
-    MPI_Comm world2d_;
-    int world2d_my_coords_[2];
-    int world2d_my_rank_;
     int world2d_ring_prev_;
     int world2d_ring_next_;
-    int world2d_ring_coordinator_;
-    long ring_max_sparse_part_size_;
 
 public:
-    ~PoweringColAAlgorithm() override;
-
     explicit PoweringColAAlgorithm(const ColASettings &settings);
     std::shared_ptr<SparseMatrixSplitter> init_splitter(long sparse_rows, long sparse_columns) override;
     void initialize(SparseMatrixData &&sparse_part) override;

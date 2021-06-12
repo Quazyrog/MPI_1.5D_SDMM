@@ -86,35 +86,24 @@ void PoweringColAAlgorithm::initialize(SparseMatrixData &&sparse_part)
 void PoweringColAAlgorithm::replicate()
 {
     const int p = NumberOfProcesses;
-    const int layer_size = settings_.c_param;  /* processes in the same layer replicate data */
-    const int ring_size = p / layer_size; /* processes in one ring rotate data */
+    // Layer := set of processes having the same part of A
+    const int layer_size = settings_.c_param;
+    // Ring := set of processes that rotate parts of A during multiplication
+    const int ring_size = p / layer_size;
 
-    // *** CREATE CARTESIAN COMM ***
-    // Arrange processes in a cylinder of p/layer_size layer_size
-    int coords[] = {layer_size, ring_size};
-    int periodic[] =  {false, true};
-    spdlog::debug("Creating cylindrical communicator of {} layer_size and {} layer_size", ring_size, layer_size);
-    MPI_Cart_create(MPI_COMM_WORLD, 2, coords, periodic, true, &world2d_);
-
-    // Query the new communicator and save some info
-    MPI_Comm_rank(world2d_, &world2d_my_rank_);
-    MPI_Cart_coords(world2d_, world2d_my_rank_, 2, world2d_my_coords_);
-    coords[0] = world2d_my_coords_[0];
-    coords[1] = world2d_my_coords_[1] + 1; /* next */
-    MPI_Cart_rank(world2d_, coords, &world2d_ring_next_);
-    coords[1] = world2d_my_coords_[1] - 1; /* prev */
-    MPI_Cart_rank(world2d_, coords, &world2d_ring_prev_);
-    coords[1] = 0; /* local coordinator, just in case */
-    MPI_Cart_rank(world2d_, coords, &world2d_ring_coordinator_);
-    spdlog::info("Cartesian communicator initialized: coords=({}, {}), prev={}, next={}, ring_coordinator={}",
-                 world2d_my_coords_[0], world2d_my_coords_[1], world2d_ring_prev_, world2d_ring_next_,
-                 world2d_ring_coordinator_);
+    // Do the math - what is the number of next process in ring  and layer
+    const int my_ring_num = ProcessRank / ring_size;
+    const int my_layer_num = ProcessRank % ring_size;
+    const int first_in_ring = ring_size * my_ring_num;
+    world2d_ring_next_ = my_layer_num == ring_size - 1 ? first_in_ring : ProcessRank + 1;
+    world2d_ring_prev_ = my_layer_num == 0 ? first_in_ring + ring_size - 1 : ProcessRank - 1;
+    spdlog::info("coordinates=({}, {}), prev={}, next={}", my_layer_num, my_ring_num, world2d_ring_prev_,
+                 world2d_ring_next_);
 
     // *** REPLICATE A ***
     // Create temporary communicator for this replication layer
     MPI_Comm layer;
-    int remain_dims[] = {true, false};
-    MPI_Cart_sub(world2d_, remain_dims, &layer);
+    MPI_Comm_split(MPI_COMM_WORLD, my_layer_num, ProcessRank, &layer);
 
     // Determine size of combined parts of sparse matrix in this layer and offsets to place them in buffer
     int local_size = static_cast<int>(a_.values.size());
@@ -144,7 +133,7 @@ void PoweringColAAlgorithm::replicate()
     MPI_Allgatherv(local_triples.data(), static_cast<int>(local_triples.size()), triple_data_type,
                    combined_triples.data(), all_sizes.data(), all_offsets.data(), triple_data_type,
                    layer);
-    spdlog::info("Replication layer {} has {} sparse entries", world2d_my_coords_[1], combined_size);
+    spdlog::info("Replication layer {} has {} sparse entries", my_layer_num, combined_size);
     spdlog::trace("Gathered sparse entries: {}", VectorToString(combined_triples));
 
     // Finally construct the A matrix
@@ -156,13 +145,13 @@ void PoweringColAAlgorithm::replicate()
     // *** PREPARE INBOX FOR ROTATING A ***
     // Create communicator for this ring
     MPI_Comm ring;
-    remain_dims[0] = false;
-    remain_dims[1] = true;
-    MPI_Cart_sub(world2d_, remain_dims, &ring);
+    MPI_Comm_split(MPI_COMM_WORLD, my_ring_num, ProcessRank, &ring);
 
     // Compute maximal size of sparse part within the ring
     int max_combined_size;
     MPI_Allreduce(&combined_size, &max_combined_size, 1, MPI_INT, MPI_MAX, ring);
+
+    MPI_Comm_free(&ring);
 
     // Initialize inbox structure
     inbox_.rows = a_.rows;
@@ -172,11 +161,6 @@ void PoweringColAAlgorithm::replicate()
     a_.indices.resize(max_combined_size);
     inbox_.values.resize(max_combined_size);
     a_.values.resize(max_combined_size);
-}
-
-PoweringColAAlgorithm::~PoweringColAAlgorithm()
-{
-    MPI_Comm_free(&world2d_);
 }
 
 void PoweringColAAlgorithm::multiply()
@@ -200,18 +184,18 @@ void PoweringColAAlgorithm::multiply()
         // Asynchronously send sparse part now...
         std::array<MPI_Request, 6> requests;
         MPI_Isend(a_.offsets.data(), static_cast<int>(a_.offsets.size()), MPI_LONG, world2d_ring_next_,
-                  Tags::SPARSE_OFFSETS_ARRAY, world2d_, &requests[0]);
+                  Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD, &requests[0]);
         MPI_Isend(a_.indices.data(), static_cast<int>(a_.offsets.back()), MPI_LONG, world2d_ring_next_,
-                  Tags::SPARSE_INDICES_ARRAY, world2d_, &requests[1]);
+                  Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD, &requests[1]);
         MPI_Isend(a_.values.data(), static_cast<int>(a_.offsets.back()), MPI_DOUBLE, world2d_ring_next_,
-                  Tags::SPARSE_VALUES_ARRAY, world2d_, &requests[2]);
+                  Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD, &requests[2]);
         // ... and asynchronously receive (note that a_ and inbox_ have the same sizes of all vectors)
         MPI_Irecv(inbox_.offsets.data(), static_cast<int>(a_.offsets.size()), MPI_LONG, world2d_ring_prev_,
-                  Tags::SPARSE_OFFSETS_ARRAY, world2d_, &requests[3]);
+                  Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD, &requests[3]);
         MPI_Irecv(inbox_.indices.data(), static_cast<int>(inbox_.indices.size()), MPI_LONG, world2d_ring_prev_,
-                  Tags::SPARSE_INDICES_ARRAY, world2d_, &requests[4]);
+                  Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD, &requests[4]);
         MPI_Irecv(inbox_.values.data(), static_cast<int>(inbox_.values.size()), MPI_DOUBLE, world2d_ring_prev_,
-                  Tags::SPARSE_VALUES_ARRAY, world2d_, &requests[5]);
+                  Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD, &requests[5]);
 
         SparseDenseMultiply(a_, b_, c_);
 
