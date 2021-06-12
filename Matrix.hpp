@@ -62,7 +62,7 @@ struct SparseMatrixData
         }
     }
 
-    static std::tuple<size_t, size_t, std::vector<SparseEntry>> ReadCSRFile(std::istream &stream);
+    static std::tuple<long, long, std::vector<SparseEntry>> ReadCSRFile(std::istream &stream);
     static SparseMatrixData BuildCSC(long rows, long cols, size_t count, SparseEntry *data);
     static SparseMatrixData BuildCSR(long rows, long cols, size_t count, SparseEntry *data);
 };

@@ -12,6 +12,7 @@
 #include "Matrix.hpp"
 #include "MatrixPoweringAlgorithm.hpp"
 #include "PoweringColAAlgorithm.hpp"
+#include "densematgen.h"
 
 int ProcessRank, NumberOfProcesses;
 ProgramOptions Options;
@@ -66,6 +67,8 @@ ProgramOptions ParseCommandLineOptions(const int argc, char **argv)
             } catch (std::exception &e) {
                 throw CommandLineError("invalid double literal '{}' for option -g: {}", s, e.what());
             }
+        } else if (option == "--test-compute") {
+            options.test_compute = true;
         } else {
             throw CommandLineError("unknown option '{}'", option);
         }
@@ -198,12 +201,47 @@ auto InitializeAlgorithm(MatrixPoweringAlgorithm &algorithm)
     spdlog::info("Algorithm initialization complete!");
 }
 
-
 static double RoundWallTime(double seconds)
 {
     return std::round(seconds * 1'000'000) / 1'000;
 }
 
+int TestCompute()
+{
+    if (ProcessRank != COORDINATOR_WORLD_RANK)
+        return 0;
+
+    spdlog::info("Reading sparse matrix from {}", Options.sparse_matrix_file.string());
+    std::ifstream s{Options.sparse_matrix_file};
+    auto [r, c, entries] = SparseMatrixData::ReadCSRFile(s);
+    if (r != c) {
+        spdlog::critical("Sparse matrix was supposed to be square, not {}x{}!", r, c);
+    }
+    auto n = r;
+    auto sparse = SparseMatrixData::BuildCSR(n, n, entries.size(), entries.data());
+    DenseMatrix dense(n, n), result(n, n);
+    dense.in_order_foreach([](auto r, auto c, auto &v) {
+        v = generate_double(Options.dense_matrix_seed, r, c);
+    });
+
+    for (int pow = 0; pow < Options.exponent; ++pow) {
+        if (pow != 0)
+            std::swap(dense, result);
+        spdlog::info("Executing multiplication {}/{}", pow + 1, Options.exponent);
+        SparseDenseMultiply(sparse, dense, result);
+    }
+
+    spdlog::info("Here goes the result...");
+    std::cout << n << " " << n;
+    for (long r = 0; r < n; ++r) {
+        std::cout << "\n";
+        for (long c = 0; c < n; ++c)
+            std::cout << result(r, c) << " ";
+    }
+    std::cout << std::endl;
+
+    return 0;
+}
 
 int main(int argc, char **argv)
 {
@@ -221,6 +259,12 @@ int main(int argc, char **argv)
     spdlog::info("Built: {} {}", __DATE__, __TIME__);
     spdlog::info("My PID is {}", getpid());
     spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
+
+    if (Options.test_compute) {
+        auto r = TestCompute();
+        MPI_Finalize();
+        return r;
+    }
 
     double initialization_duration;
     MatrixPoweringAlgorithm *algorithm;
@@ -266,7 +310,7 @@ int main(int argc, char **argv)
     for (int pow = 0; pow < Options.exponent; ++pow) {
         if (pow != 0)
             algorithm->swap_cb();
-        spdlog::info("Execution multiplication {}/{}", pow + 1, Options.exponent);
+        spdlog::info("Executing multiplication {}/{}", pow + 1, Options.exponent);
         algorithm->multiply();
         MPI_Barrier(MPI_COMM_WORLD);
     }

@@ -1,8 +1,8 @@
 #include "Matrix.hpp"
 
-std::tuple<size_t, size_t, std::vector<SparseEntry>> SparseMatrixData::ReadCSRFile(std::istream &stream)
+std::tuple<long, long, std::vector<SparseEntry>> SparseMatrixData::ReadCSRFile(std::istream &stream)
 {
-    size_t nrows, ncols, entries, magic;
+    long nrows, ncols, entries, magic;
     if (!(stream >> nrows >> ncols >> entries >> magic))
         throw IOError("Failed to read header in sparse matrix file");
     if (magic != 4)
@@ -12,19 +12,19 @@ std::tuple<size_t, size_t, std::vector<SparseEntry>> SparseMatrixData::ReadCSRFi
     std::vector<SparseEntry> result(entries);
 
     // Read entries
-    for (size_t e = 0; e < entries; ++e) {
+    for (long e = 0; e < entries; ++e) {
         double entry;
         if (!(stream >> result[e].value))
             throw CSRReadError("Failed to read entry {}", entry);
     }
 
     // Read rows offsets
-    size_t last_offset = 0;
+    long last_offset = 0;
     if (!(stream >> last_offset))
         throw CSRReadError("Failed to read entries end offset");
     if (last_offset != 0)
         throw CSRReadError("initial offset should be 0, got {}", last_offset);
-    size_t entry = last_offset;
+    long entry = last_offset;
     for (int r = 0; r < nrows; ++r) {
         long offset;
         if (!(stream >> offset))
@@ -39,7 +39,7 @@ std::tuple<size_t, size_t, std::vector<SparseEntry>> SparseMatrixData::ReadCSRFi
         spdlog::warn("Unexpected CSR entries end offset: got {}, should be {}", last_offset, entries);
 
     // Read column indices
-    for (size_t e = 0; e < entries; ++e) {
+    for (long e = 0; e < entries; ++e) {
         if (!(stream >> result[e].column))
             throw CSRReadError("Failed to read column index for entry {}", e);
     }
