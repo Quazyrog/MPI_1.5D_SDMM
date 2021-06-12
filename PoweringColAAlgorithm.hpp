@@ -17,7 +17,7 @@ class PoweringColAAlgorithm: public MatrixPoweringAlgorithm
     ColASettings settings_;
     std::shared_ptr<SparseMatrixSplitter> splitter_;
     long problem_size_ = -1;
-    SparseMatrixData a_;
+    SparseMatrixData a_, inbox_;
     DenseMatrix b_;
     DenseMatrix c_;
 
@@ -27,6 +27,7 @@ class PoweringColAAlgorithm: public MatrixPoweringAlgorithm
     int world2d_ring_prev_;
     int world2d_ring_next_;
     int world2d_ring_coordinator_;
+    long ring_max_sparse_part_size_;
 
 public:
     ~PoweringColAAlgorithm() override;
@@ -35,6 +36,8 @@ public:
     std::shared_ptr<SparseMatrixSplitter> init_splitter(long sparse_rows, long sparse_columns) override;
     void initialize(SparseMatrixData &&sparse_part) override;
     void replicate() override;
+
+    void multiply() override;
 };
 
 #endif // POWERING_COL_A_ALGORITHM_HPP

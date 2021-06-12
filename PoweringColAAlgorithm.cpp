@@ -89,6 +89,7 @@ void PoweringColAAlgorithm::replicate()
     const int layer_size = settings_.c_param;  /* processes in the same layer replicate data */
     const int ring_size = p / layer_size; /* processes in one ring rotate data */
 
+    // *** CREATE CARTESIAN COMM ***
     // Arrange processes in a cylinder of p/layer_size layer_size
     int coords[] = {layer_size, ring_size};
     int periodic[] =  {false, true};
@@ -109,6 +110,7 @@ void PoweringColAAlgorithm::replicate()
                  world2d_my_coords_[0], world2d_my_coords_[1], world2d_ring_prev_, world2d_ring_next_,
                  world2d_ring_coordinator_);
 
+    // *** REPLICATE A ***
     // Create temporary communicator for this replication layer
     MPI_Comm layer;
     int remain_dims[] = {true, false};
@@ -147,14 +149,76 @@ void PoweringColAAlgorithm::replicate()
     // Finally construct the A matrix
     assert(combined_size == combined_triples.size());
     a_ = SparseMatrixData::BuildCSR(a_.rows, a_.columns, combined_triples.size(), combined_triples.data());
-//    for (const auto &t : combined_triples) {
-//        std::cout << t.row << " " << t.column << " " << t.value << " (" << ProcessRank <<  ")\n";
-//    }
     MPI_Type_free(&triple_data_type);
     MPI_Comm_free(&layer);
+
+    // *** PREPARE INBOX FOR ROTATING A ***
+    // Create communicator for this ring
+    MPI_Comm ring;
+    remain_dims[0] = false;
+    remain_dims[1] = true;
+    MPI_Cart_sub(world2d_, remain_dims, &ring);
+
+    // Compute maximal size of sparse part within the ring
+    int max_combined_size;
+    MPI_Allreduce(&combined_size, &max_combined_size, 1, MPI_INT, MPI_MAX, ring);
+
+    // Initialize inbox structure
+    inbox_.rows = a_.rows;
+    inbox_.columns = a_.columns;
+    inbox_.offsets.resize(a_.offsets.size());
+    inbox_.indices.resize(max_combined_size);
+    a_.indices.resize(max_combined_size);
+    inbox_.values.resize(max_combined_size);
+    a_.values.resize(max_combined_size);
 }
 
 PoweringColAAlgorithm::~PoweringColAAlgorithm()
 {
     MPI_Comm_free(&world2d_);
+}
+
+void PoweringColAAlgorithm::multiply()
+{
+    assert(a_.columns == inbox_.columns);
+    assert(a_.rows == inbox_.rows);
+    assert(a_.offsets.size() == inbox_.offsets.size());
+    assert(a_.indices.size() == inbox_.indices.size());
+    assert(a_.values.size() == inbox_.values.size());
+
+    // Set C = 0
+    c_.in_order_foreach([](auto, auto, auto &elt) {
+        elt = 0;
+    });
+
+    // *** MULTIPLY AND ROTATE A ***
+    const int steps = NumberOfProcesses / settings_.c_param;
+    if (ProcessRank == COORDINATOR_WORLD_RANK)
+        spdlog::info("Starting multiplication; it will be executed in {} steps", steps);
+    for (int step = 0; step < steps; ++step) {
+        // fixme c == 1
+        // Asynchronously send sparse part now...
+        std::array<MPI_Request, 6> requests;
+        MPI_Isend(a_.offsets.data(), static_cast<int>(a_.offsets.size()), MPI_LONG, world2d_ring_next_,
+                  Tags::SPARSE_OFFSETS_ARRAY, world2d_, &requests[0]);
+        MPI_Isend(a_.indices.data(), static_cast<int>(a_.offsets.back()), MPI_LONG, world2d_ring_next_,
+                  Tags::SPARSE_INDICES_ARRAY, world2d_, &requests[1]);
+        MPI_Isend(a_.values.data(), static_cast<int>(a_.offsets.back()), MPI_DOUBLE, world2d_ring_next_,
+                  Tags::SPARSE_VALUES_ARRAY, world2d_, &requests[2]);
+        // ... and asynchronously receive (note that a_ and inbox_ have the same sizes of all vectors)
+        MPI_Irecv(inbox_.offsets.data(), static_cast<int>(a_.offsets.size()), MPI_LONG, world2d_ring_prev_,
+                  Tags::SPARSE_OFFSETS_ARRAY, world2d_, &requests[3]);
+        MPI_Irecv(inbox_.indices.data(), static_cast<int>(inbox_.indices.size()), MPI_LONG, world2d_ring_prev_,
+                  Tags::SPARSE_INDICES_ARRAY, world2d_, &requests[4]);
+        MPI_Irecv(inbox_.values.data(), static_cast<int>(inbox_.values.size()), MPI_DOUBLE, world2d_ring_prev_,
+                  Tags::SPARSE_VALUES_ARRAY, world2d_, &requests[5]);
+
+        SparseDenseMultiply(a_, b_, c_);
+
+        // Complete exchange of sparse parts
+        MPI_Waitall(requests.size(), requests.data(), MPI_STATUSES_IGNORE);
+        spdlog::debug("Finished step {}/{} of multiplication: rotating from {} to {} entries", step + 1, steps,
+                      a_.offsets.back(), inbox_.offsets.back());
+        std::swap(a_, inbox_);
+    }
 }

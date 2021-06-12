@@ -93,4 +93,8 @@ public:
     {}
 };
 
+
+void SparseDenseMultiply(const SparseMatrixData &csr_matrix, const DenseMatrix &dense_matrix,
+                         const DenseMatrix &result_accumulator);
+
 #endif // MATRIX_HPP

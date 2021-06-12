@@ -173,6 +173,12 @@ auto InitializeAlgorithm(MatrixPoweringAlgorithm &algorithm)
 }
 
 
+static double RoundWallTime(double seconds)
+{
+    return std::round(seconds * 1'000'000) / 1'000;
+}
+
+
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
@@ -191,6 +197,7 @@ int main(int argc, char **argv)
         spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
     }
 
+    double initialization_duration;
     MatrixPoweringAlgorithm *algorithm;
     try {
         if (Options.used_algorithm == ProgramOptions::D15_COL_A) {
@@ -201,7 +208,14 @@ int main(int argc, char **argv)
         } else {
             throw NotImplementedError("Algorithm not implemented");
         }
+
+        // Initialize
+        initialization_duration = MPI_Wtime();
         InitializeAlgorithm(*algorithm);
+        MPI_Barrier(MPI_COMM_WORLD);
+        initialization_duration = MPI_Wtime() - initialization_duration;
+        if (ProcessRank == COORDINATOR_WORLD_RANK)
+            spdlog::info("Initialization completed in {}ms", RoundWallTime(initialization_duration));
     } catch (CSRReadError &e) {
         spdlog::critical("Unable to read CSR file {} with A matrix: {}", Options.sparse_matrix_file.string(),
                          e.message());
@@ -211,7 +225,15 @@ int main(int argc, char **argv)
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
+    // Replicate A matrix
+    double replication_duration = MPI_Wtime();
     algorithm->replicate();
+    MPI_Barrier(MPI_COMM_WORLD);
+    replication_duration = MPI_Wtime() - replication_duration;
+    if (ProcessRank == COORDINATOR_WORLD_RANK)
+        spdlog::info("Replication completed in {}ms", RoundWallTime(replication_duration));
+
+    algorithm->multiply();
 
     delete algorithm;
     MPI_Finalize();

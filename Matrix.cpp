@@ -111,3 +111,8 @@ void SparseEntry::InitMPIDataType(MPI_Datatype &type)
     MPI_Type_create_struct(3, block_lengths, offsets, types, &type);
     MPI_Type_commit(&type);
 }
+
+void SparseDenseMultiply(const SparseMatrixData &csr_matrix, const DenseMatrix &dense_matrix, const DenseMatrix &out)
+{
+    // todo ...
+}
