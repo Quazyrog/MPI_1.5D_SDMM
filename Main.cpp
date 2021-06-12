@@ -67,8 +67,8 @@ ProgramOptions ParseCommandLineOptions(const int argc, char **argv)
             } catch (std::exception &e) {
                 throw CommandLineError("invalid double literal '{}' for option -g: {}", s, e.what());
             }
-        } else if (option == "--test-compute") {
-            options.test_compute = true;
+        } else if (option == "--verify") {
+            options.verify = true;
         } else {
             throw CommandLineError("unknown option '{}'", option);
         }
@@ -122,6 +122,7 @@ void SetupLogging()
     if (ProcessRank == COORDINATOR_WORLD_RANK && !Options.log_file_path.empty()) {
         auto console_logger = std::make_shared<spdlog::sinks::ansicolor_stderr_sink_st>();
         console_logger->set_pattern(pattern);
+        console_logger->set_level(Options.stderr_log_level);
         spdlog::default_logger()->sinks().push_back(console_logger);
     }
 }
@@ -206,16 +207,14 @@ static double RoundWallTime(double seconds)
     return std::round(seconds * 1'000'000) / 1'000;
 }
 
-int TestCompute()
+DenseMatrix TestCompute()
 {
-    if (ProcessRank != COORDINATOR_WORLD_RANK)
-        return 0;
-
-    spdlog::info("Reading sparse matrix from {}", Options.sparse_matrix_file.string());
+    spdlog::info("(TEST) Reading sparse matrix from {}", Options.sparse_matrix_file.string());
     std::ifstream s{Options.sparse_matrix_file};
     auto [r, c, entries] = SparseMatrixData::ReadCSRFile(s);
     if (r != c) {
-        spdlog::critical("Sparse matrix was supposed to be square, not {}x{}!", r, c);
+        spdlog::critical("(TEST) Sparse matrix was supposed to be square, not {}x{}!", r, c);
+        MPI_Abort(MPI_COMM_WORLD, 1);
     }
     auto n = r;
     auto sparse = SparseMatrixData::BuildCSR(n, n, entries.size(), entries.data());
@@ -225,22 +224,15 @@ int TestCompute()
     });
 
     for (int pow = 0; pow < Options.exponent; ++pow) {
-        if (pow != 0)
+        if (pow != 0) {
             std::swap(dense, result);
-        spdlog::info("Executing multiplication {}/{}", pow + 1, Options.exponent);
+            result.in_order_foreach([](auto, auto, auto &v) { v = 0; });
+        }
+        spdlog::info("(TEST) Executing multiplication {}/{}", pow + 1, Options.exponent);
         SparseDenseMultiply(sparse, dense, result);
     }
 
-    spdlog::info("Here goes the result...");
-    std::cout << n << " " << n;
-    for (long r = 0; r < n; ++r) {
-        std::cout << "\n";
-        for (long c = 0; c < n; ++c)
-            std::cout << result(r, c) << " ";
-    }
-    std::cout << std::endl;
-
-    return 0;
+    return result;
 }
 
 int main(int argc, char **argv)
@@ -259,12 +251,6 @@ int main(int argc, char **argv)
     spdlog::info("Built: {} {}", __DATE__, __TIME__);
     spdlog::info("My PID is {}", getpid());
     spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
-
-    if (Options.test_compute) {
-        auto r = TestCompute();
-        MPI_Finalize();
-        return r;
-    }
 
     double initialization_duration;
     MatrixPoweringAlgorithm *algorithm;
@@ -317,17 +303,49 @@ int main(int argc, char **argv)
     multiplication_duration = MPI_Wtime() - multiplication_duration;
     spdlog::info("Multiplication completed in {}ms", RoundWallTime(multiplication_duration));
 
-    if (Options.print_result) {
+    DenseMatrix result;
+    if (Options.print_result || Options.verify) {
         spdlog::info("Gathering the result matrix");
         if (auto res = algorithm->gather_result()) {
             spdlog::info("I have entire result matrix");
-            std::cout << res->rows() << " " << res->columns();
-            for (long r = 0; r < res->rows(); ++r) {
-                std::cout << "\n";
-                for (long c = 0; c < res->columns(); ++c)
-                    std::cout << (*res)(r, c) << " ";
+            result = *res;
+        }
+    }
+
+    if (ProcessRank == COORDINATOR_WORLD_RANK) {
+        if (Options.verify) {
+            constexpr double EPS = 1E-9;
+            auto expected = TestCompute();
+            bool fail = false;
+
+            // Expected
+            for (long r = 0; r < expected.rows(); ++r) {
+                for (long c = 0; c < expected.columns(); ++c) {
+                    if (std::abs(result(r, c) - expected(r, c)) > EPS) {
+                        if (Options.print_result) {
+                            spdlog::warn("At position ({}, {}) value {} was expected, but {} found", r, c,
+                                         expected(r, c), result(r, c));
+                        }
+                        fail = true;
+                    }
+                }
             }
-            std::cout << std::endl;
+
+            if (fail)
+                spdlog::error("The result seems wrong!");
+            else
+                spdlog::info("The result seems right...");
+
+        } else {
+            if (Options.print_result) {
+                std::cout << result.rows() << " " << result.columns();
+                for (long r = 0; r < result.rows(); ++r) {
+                    std::cout << "\n";
+                    for (long c = 0; c < result.columns(); ++c)
+                        std::cout << result(r, c) << " ";
+                }
+                std::cout << std::endl;
+            }
         }
     }
 
