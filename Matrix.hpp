@@ -73,9 +73,13 @@ class DenseMatrix
 
 public:
     DenseMatrix() = default;
-    DenseMatrix(long rows, long columns):
-        values_(rows * columns, 0)
-    {}
+    DenseMatrix(long rows, long columns, std::vector<double> &&data={}):
+        rows_(rows),
+        columns_(columns),
+        values_(std::move(data))
+    {
+        values_.resize(rows * columns, 0);
+    }
 
     inline long rows() const noexcept
     { return rows_; }
@@ -88,6 +92,9 @@ public:
 
     inline double operator()(long row, long column) const noexcept
     { return values_[column * rows_ + row]; }
+
+    inline double *data() noexcept
+    { return values_.data(); }
 
     template<class Function>
     void in_order_foreach(Function body)

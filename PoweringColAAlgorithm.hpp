@@ -38,6 +38,9 @@ public:
     void replicate() override;
 
     void multiply() override;
+    void swap_cb() override;
+
+    std::optional<DenseMatrix> gather_result() override;
 };
 
 #endif // POWERING_COL_A_ALGORITHM_HPP

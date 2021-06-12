@@ -233,8 +233,39 @@ int main(int argc, char **argv)
     if (ProcessRank == COORDINATOR_WORLD_RANK)
         spdlog::info("Replication completed in {}ms", RoundWallTime(replication_duration));
 
-    algorithm->multiply();
+    // Do the powering
+    double multiplication_duration = MPI_Wtime();
+    if (Options.exponent == 0) {
+        spdlog::critical("Sorry, I'm not ready for exponent=0!");
+        MPI_Finalize();
+        return 2;
+    }
+    for (int pow = 0; pow < Options.exponent; ++pow) {
+        if (pow != 0)
+            algorithm->swap_cb();
+        spdlog::info("Execution multiplication {}/{}", pow + 1, Options.exponent);
+        algorithm->multiply();
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+    multiplication_duration = MPI_Wtime() - multiplication_duration;
+    if (ProcessRank == COORDINATOR_WORLD_RANK)
+        spdlog::info("Multiplication completed in {}ms", RoundWallTime(multiplication_duration));
 
+    if (Options.print_result) {
+        spdlog::info("Gathering the result matrix");
+        if (auto res = algorithm->gather_result()) {
+            spdlog::info("I have entire result matrix");
+            std::cout << res->rows() << " " << res->columns();
+            for (long r = 0; r < res->rows(); ++r) {
+                std::cout << "\n";
+                for (long c = 0; c < res->columns(); ++c)
+                    std::cout << (*res)(r, c) << " ";
+            }
+            std::cout << std::endl;
+        }
+    }
+
+    spdlog::info("So Long, and Thanks for All the Fish!");
     delete algorithm;
     MPI_Finalize();
     return 0;

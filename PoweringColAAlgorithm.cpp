@@ -222,3 +222,42 @@ void PoweringColAAlgorithm::multiply()
         std::swap(a_, inbox_);
     }
 }
+
+void PoweringColAAlgorithm::swap_cb()
+{
+    spdlog::debug("Swapping C and B for next multiplication");
+    std::swap(b_, c_);
+}
+
+std::optional<DenseMatrix> PoweringColAAlgorithm::gather_result()
+{
+    const auto total_size = problem_size_ * problem_size_;
+    std::vector<double> result;
+    if (ProcessRank == COORDINATOR_WORLD_RANK)
+        result.resize(total_size);
+
+    DataDistribution1D result_distribution(problem_size_, NumberOfProcesses);
+    std::vector<int> offsets, sizes;
+    if (ProcessRank == COORDINATOR_WORLD_RANK) {
+        offsets.reserve(NumberOfProcesses);
+        sizes.reserve(NumberOfProcesses);
+        for (int i = 0; i < NumberOfProcesses; ++i) {
+            auto first_col = result_distribution.offset(i);
+            auto last_col = result_distribution.offset(i + 1);
+            offsets.push_back(static_cast<int>(first_col * problem_size_));
+            sizes.push_back(static_cast<int>((last_col - first_col) * problem_size_));
+        }
+        spdlog::debug("Gather result offsets are: {}", VectorToString(offsets));
+        spdlog::debug("Gather result sizes are: {}", VectorToString(sizes));
+    }
+
+    const int my_send_size = static_cast<int>(c_.rows() * c_.columns());
+    spdlog::debug("Contributing {} entries to the result", my_send_size);
+    MPI_Gatherv(c_.data(), my_send_size, MPI_DOUBLE,
+                result.data(), sizes.data(), offsets.data(), MPI_DOUBLE,
+                COORDINATOR_WORLD_RANK, MPI_COMM_WORLD);
+
+    if (ProcessRank == COORDINATOR_WORLD_RANK)
+        return DenseMatrix(problem_size_, problem_size_, std::move(result));
+    return std::optional<DenseMatrix>{};
+}

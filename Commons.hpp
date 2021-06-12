@@ -25,6 +25,7 @@ struct ProgramOptions
     std::optional<double> print_ge_count;
 
     spdlog::level::level_enum stderr_log_level = spdlog::level::level_enum::info;
+    std::string log_file_path;
 };
 
 
