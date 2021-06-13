@@ -27,7 +27,7 @@ class PoweringColAAlgorithm: public MatrixPoweringAlgorithm
 public:
     explicit PoweringColAAlgorithm(const ColASettings &settings);
     std::shared_ptr<SparseMatrixSplitter> init_splitter(long sparse_rows, long sparse_columns) override;
-    void initialize(SparseMatrixData &&sparse_part) override;
+    void initialize(SparseMatrixData &&sparse_part, int dense_seed) override;
     void replicate() override;
 
     void multiply() override;

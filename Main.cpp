@@ -13,6 +13,7 @@
 #include "MatrixPoweringAlgorithm.hpp"
 #include "PoweringColAAlgorithm.hpp"
 #include "densematgen.h"
+#include "PoweringInnerAbcAlgorithm.hpp"
 
 int ProcessRank, NumberOfProcesses;
 ProgramOptions Options;
@@ -198,7 +199,7 @@ auto InitializeAlgorithm(MatrixPoweringAlgorithm &algorithm)
         spdlog::trace("Received values array: {}", VectorToString(a_part.values));
     }
     /* now every process holds it's range of columns of A without replication */
-    algorithm.initialize(std::move(a_part));
+    algorithm.initialize(std::move(a_part), Options.dense_matrix_seed);
     spdlog::info("Algorithm initialization complete!");
 }
 

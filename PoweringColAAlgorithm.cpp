@@ -63,7 +63,7 @@ std::shared_ptr<SparseMatrixSplitter> PoweringColAAlgorithm::init_splitter(long 
     return splitter_;
 }
 
-void PoweringColAAlgorithm::initialize(SparseMatrixData &&sparse_part)
+void PoweringColAAlgorithm::initialize(SparseMatrixData &&sparse_part, int dense_seed)
 {
     a_ = std::move(sparse_part);
     DataDistribution1D b_distribution(a_.rows, NumberOfProcesses);
