@@ -64,13 +64,14 @@ std::shared_ptr<SparseMatrixSplitter> PoweringInnerABCAlgorithm::init_splitter(l
 {
     if (sparse_rows != sparse_columns)
         throw ValueError("Matrix A was supposed to be square, not {}x{}", sparse_rows, sparse_columns);
-    problem_size_ = sparse_columns;
     return std::make_shared<Splitter>();
 }
 
 void PoweringInnerABCAlgorithm::initialize(SparseMatrixData &&sparse_part, const int dense_seed)
 {
     std::swap(a_, sparse_part);
+    problem_size_ = a_.columns;
+    spdlog::debug("Problem size is {}", problem_size_);
 
     DataDistribution1D dist(problem_size_, NumberOfProcesses);
     const auto nrows = static_cast<long>(problem_size_);
@@ -125,9 +126,43 @@ void PoweringInnerABCAlgorithm::replicate_a_(MPI_Comm &layer)
                    gathered_entries.data(), sizes.data(), offsets.data(), sparse_entry_datatype, layer);
 
     // Reconstruct new matrix
-    spdlog::info("Layer {} has {} entries in it's sparse matrix", coord_ring_, total_size);
+    spdlog::info("Layer {} has {} entries in its sparse matrix", coord_ring_, total_size);
     spdlog::trace("Gathered entries: {}", VectorToString(gathered_entries));
     a_ = SparseMatrixData::BuildCSR(a_.rows, a_.columns, gathered_entries.size(), gathered_entries.data());
+}
+
+void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
+{
+    // We can actually determine these things locally :)
+    DataDistribution1D cols_dist(problem_size_, static_cast<size_t>(NumberOfProcesses));
+    int total_size = 0;
+    std::vector<int> sizes;
+    sizes.reserve(layer_size_);
+    std::vector<int> offsets;
+    sizes.reserve(layer_size_);
+
+    // Compute sizes and offsets
+    const int first_in_layer = ProcessRank - (ProcessRank % layer_size_);
+    const int first_out_layer = first_in_layer + layer_size_;
+    for (int proc = first_in_layer; proc <= first_out_layer; ++proc) {
+        const int size = static_cast<int>(cols_dist.offset(proc + 1) - cols_dist.offset(proc))
+            * static_cast<int>(problem_size_);
+        sizes.push_back(size);
+        offsets.push_back(total_size);
+        total_size += size;
+    }
+    spdlog::debug("Gathered B parts sizes in layer {}: {}", coord_ring_, VectorToString(sizes));
+
+    // Gather data of B
+    spdlog::debug("Gathering {} elements of dense matrix on layer {} (columns {} through {})", total_size, coord_ring_,
+                  cols_dist.offset(first_in_layer), cols_dist.offset(first_out_layer) - 1);
+    std::vector<double> gathered_data(total_size);
+    MPI_Allgatherv(b_.data(), static_cast<int>(b_.size()), MPI_DOUBLE,
+                   gathered_data.data(), sizes.data(), offsets.data(), MPI_DOUBLE, layer);
+
+    // Combine received data into B (it is column major order, so it works)
+    const int n_cols = static_cast<int>(cols_dist.offset(first_out_layer) - cols_dist.offset(first_in_layer));
+    b_ = ColumnMajorMatrix(static_cast<int>(problem_size_), n_cols, std::move(gathered_data));
 }
 
 void PoweringInnerABCAlgorithm::multiply()

@@ -72,6 +72,9 @@ public:
         values_.resize(rows * columns, 0);
     }
 
+    inline long size() const noexcept
+    { return static_cast<long>(values_.size()); }
+
     inline long rows() const noexcept
     { return rows_; }
 
