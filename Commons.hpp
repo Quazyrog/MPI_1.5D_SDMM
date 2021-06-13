@@ -177,26 +177,4 @@ enum MessageTag {
 }
 
 
-template<class TIter>
-std::string VectorToString(TIter begin, TIter end)
-{
-    std::stringstream s;
-    s << "[";
-    bool comma = false;
-    for (auto it = begin; it != end; ++it) {
-        if (comma)
-            s << ", ";
-        s << *it;
-        comma = true;
-    }
-    s << "]";
-    return s.str();
-}
-
-template<class T>
-std::string VectorToString(const std::vector<T> &vec)
-{
-    return VectorToString(vec.begin(), vec.end());
-}
-
 #endif //COMMONS_HPP

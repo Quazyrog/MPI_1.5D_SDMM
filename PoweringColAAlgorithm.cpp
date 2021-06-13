@@ -1,5 +1,7 @@
 #include "densematgen.h"
 #include "PoweringColAAlgorithm.hpp"
+#include "Commons.hpp"
+#include "Debug.hpp"
 
 
 namespace {
@@ -134,7 +136,7 @@ void PoweringColAAlgorithm::replicate()
                    combined_triples.data(), all_sizes.data(), all_offsets.data(), triple_data_type,
                    layer);
     spdlog::info("Replication layer {} has {} sparse entries", my_layer_num, combined_size);
-    spdlog::trace("Gathered sparse entries: {}", VectorToString(combined_triples));
+    spdlog::trace("Gathered sparse entries: {}", Debug::VectorToString(combined_triples));
 
     // Finally construct the A matrix
     assert(combined_size == combined_triples.size());
@@ -231,8 +233,8 @@ std::optional<ColumnMajorMatrix> PoweringColAAlgorithm::gather_result()
             offsets.push_back(static_cast<int>(first_col * problem_size_));
             sizes.push_back(static_cast<int>((last_col - first_col) * problem_size_));
         }
-        spdlog::debug("Gather result offsets are: {}", VectorToString(offsets));
-        spdlog::debug("Gather result sizes are: {}", VectorToString(sizes));
+        spdlog::debug("Gather result offsets are: {}", Debug::VectorToString(offsets));
+        spdlog::debug("Gather result sizes are: {}", Debug::VectorToString(sizes));
     }
 
     const int my_send_size = static_cast<int>(c_.rows() * c_.columns());
@@ -240,7 +242,7 @@ std::optional<ColumnMajorMatrix> PoweringColAAlgorithm::gather_result()
     MPI_Gatherv(c_.data(), my_send_size, MPI_DOUBLE,
                 result.data(), sizes.data(), offsets.data(), MPI_DOUBLE,
                 COORDINATOR_WORLD_RANK, MPI_COMM_WORLD);
-    spdlog::trace("Sent part of result: {}", VectorToString(c_.data(), c_.data() + my_send_size));
+    spdlog::trace("Sent part of result: {}", Debug::VectorToString(c_.data(), c_.data() + my_send_size));
 
     if (ProcessRank == COORDINATOR_WORLD_RANK)
         return ColumnMajorMatrix(problem_size_, problem_size_, std::move(result));

@@ -22,6 +22,7 @@ class PoweringInnerABCAlgorithm: public MatrixPoweringAlgorithm
     int number_of_phases_;
 
     size_t problem_size_;
+    int seed_;
     SparseMatrixData a_;
     ColumnMajorMatrix b_;
 

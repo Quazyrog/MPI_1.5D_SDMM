@@ -14,6 +14,7 @@
 #include "PoweringColAAlgorithm.hpp"
 #include "densematgen.h"
 #include "PoweringInnerAbcAlgorithm.hpp"
+#include "Debug.hpp"
 
 int ProcessRank, NumberOfProcesses;
 ProgramOptions Options;
@@ -155,7 +156,7 @@ auto InitializeAlgorithm(MatrixPoweringAlgorithm &algorithm)
         for (int proc = 0; proc < NumberOfProcesses; ++proc) {
             // Construct and send the matrix in CSR representation
             auto [entries, count] = splitter->range_of(proc);
-            spdlog::trace("Initial part of process {} is: {}", proc, VectorToString(entries, entries + count));
+            spdlog::trace("Initial part of process {} is: {}", proc, Debug::VectorToString(entries, entries + count));
             auto mat_part = SparseMatrixData::BuildCSR(static_cast<long>(mat_rows), static_cast<long>(mat_cols),
                                                        count, entries);
             if (proc != ProcessRank) {
@@ -186,18 +187,18 @@ auto InitializeAlgorithm(MatrixPoweringAlgorithm &algorithm)
         // Allocate and receive my A part in CSR form
         MPI_Recv(a_part.offsets.data(), static_cast<int>(a_part.offsets.size()), MPI_LONG, COORDINATOR_WORLD_RANK,
                  Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        spdlog::trace("Received offsets array: {}", VectorToString(a_part.offsets));
+        spdlog::trace("Received offsets array: {}", Debug::VectorToString(a_part.offsets));
         spdlog::debug("Number of nonzero elements in my part of A is {}", a_part.offsets.back());
 
         a_part.indices.resize(a_part.offsets.back());
         MPI_Recv(a_part.indices.data(), static_cast<int>(a_part.indices.size()), MPI_LONG, COORDINATOR_WORLD_RANK,
                  Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        spdlog::trace("Received indices array: {}", VectorToString(a_part.indices));
+        spdlog::trace("Received indices array: {}", Debug::VectorToString(a_part.indices));
 
         a_part.values.resize(a_part.offsets.back());
         MPI_Recv(a_part.values.data(), static_cast<int>(a_part.values.size()), MPI_DOUBLE, COORDINATOR_WORLD_RANK,
                  Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        spdlog::trace("Received values array: {}", VectorToString(a_part.values));
+        spdlog::trace("Received values array: {}", Debug::VectorToString(a_part.values));
     }
     /* now every process holds it's range of columns of A without replication */
     algorithm.initialize(std::move(a_part), Options.dense_matrix_seed);
@@ -251,6 +252,8 @@ int main(int argc, char **argv)
     }
     SetupLogging();
     spdlog::info("Built: {} {}", __DATE__, __TIME__);
+    if constexpr (Debug::ENABLED)
+        spdlog::warn("THIS BUILD HAS ENABLED DEBUG FUNCTIONALITY THAT IS BAD FOR PERFORMANCE!");
     spdlog::info("My PID is {}", getpid());
     spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
 

@@ -1,5 +1,7 @@
 #include "PoweringInnerAbcAlgorithm.hpp"
 #include "densematgen.h"
+#include "Commons.hpp"
+#include "Debug.hpp"
 
 namespace {
 class Splitter: public SparseMatrixSplitter
@@ -82,6 +84,8 @@ void PoweringInnerABCAlgorithm::initialize(SparseMatrixData &&sparse_part, const
         v = generate_double(dense_seed, r, first_column + c);
     });
     std::swap(b_, b);
+
+    seed_ = dense_seed;
 }
 
 void PoweringInnerABCAlgorithm::replicate()
@@ -118,7 +122,7 @@ void PoweringInnerABCAlgorithm::replicate_a_(MPI_Comm &layer)
     assert(a_.size() == local_entries.size());
 
     // Gather them all
-    spdlog::trace("Layer {} offsets array: {}", coord_ring_, VectorToString(offsets));
+    spdlog::trace("Layer {} offsets array: {}", coord_ring_, Debug::VectorToString(offsets));
     MPI_Datatype sparse_entry_datatype;
     SparseEntry::InitMPIDataType(sparse_entry_datatype);
     std::vector<SparseEntry> gathered_entries(total_size);
@@ -127,7 +131,7 @@ void PoweringInnerABCAlgorithm::replicate_a_(MPI_Comm &layer)
 
     // Reconstruct new matrix
     spdlog::info("Layer {} has {} entries in its sparse matrix", coord_ring_, total_size);
-    spdlog::trace("Gathered entries: {}", VectorToString(gathered_entries));
+    spdlog::trace("Gathered entries: {}", Debug::VectorToString(gathered_entries));
     a_ = SparseMatrixData::BuildCSR(a_.rows, a_.columns, gathered_entries.size(), gathered_entries.data());
 }
 
@@ -151,7 +155,7 @@ void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
         offsets.push_back(total_size);
         total_size += size;
     }
-    spdlog::debug("Gathered B parts sizes in layer {}: {}", coord_ring_, VectorToString(sizes));
+    spdlog::debug("Gathered B parts sizes in layer {}: {}", coord_ring_, Debug::VectorToString(sizes));
 
     // Gather data of B
     spdlog::debug("Gathering {} elements of dense matrix on layer {} (columns {} through {})", total_size, coord_ring_,
@@ -163,6 +167,20 @@ void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
     // Combine received data into B (it is column major order, so it works)
     const int n_cols = static_cast<int>(cols_dist.offset(first_out_layer) - cols_dist.offset(first_in_layer));
     b_ = ColumnMajorMatrix(static_cast<int>(problem_size_), n_cols, std::move(gathered_data));
+
+    // Check the data
+    if constexpr(Debug::ENABLED) {
+        const auto first_column = cols_dist.offset(first_in_layer);
+        b_.in_order_foreach([this, first_column](auto r, auto c, auto v) {
+            c += first_column;
+            const auto expected = generate_double(seed_, r, c);
+            if (v != expected) {
+                spdlog::critical("Unexpected value after gather: B[{}, {}]={} != {}", r, c, v, expected);
+                MPI_Abort(MPI_COMM_WORLD, 1);
+            }
+        });
+        spdlog::debug("Gathered B passed the check");
+    }
 }
 
 void PoweringInnerABCAlgorithm::multiply()

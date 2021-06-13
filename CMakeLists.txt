@@ -15,6 +15,7 @@ target_compile_options(generator PUBLIC -std=c++14  -g3 -Wall -O0)
 
 add_executable(matrixmul Main.cpp
         Commons.hpp
+        Debug.hpp
         Matrix.cpp Matrix.hpp
         densematgen.cpp densematgen.h
         MatrixPoweringAlgorithm.hpp
