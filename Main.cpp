@@ -155,6 +155,7 @@ auto InitializeAlgorithm(MatrixPoweringAlgorithm &algorithm)
         for (int proc = 0; proc < NumberOfProcesses; ++proc) {
             // Construct and send the matrix in CSR representation
             auto [entries, count] = splitter->range_of(proc);
+            spdlog::trace("Initial part of process {} is: {}", proc, VectorToString(entries, entries + count));
             auto mat_part = SparseMatrixData::BuildCSR(static_cast<long>(mat_rows), static_cast<long>(mat_cols),
                                                        count, entries);
             if (proc != ProcessRank) {
@@ -262,7 +263,7 @@ int main(int argc, char **argv)
             settings.c_param = Options.replication_group_size;
             algorithm = new PoweringColAAlgorithm(settings);
         } else {
-            throw NotImplementedError("Algorithm not implemented");
+            algorithm = new PoweringInnerABCAlgorithm(Options.replication_group_size);
         }
 
         // Initialize

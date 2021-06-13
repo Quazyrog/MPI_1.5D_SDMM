@@ -18,7 +18,9 @@ add_executable(matrixmul Main.cpp
         Matrix.cpp Matrix.hpp
         densematgen.cpp densematgen.h
         MatrixPoweringAlgorithm.hpp
-        PoweringColAAlgorithm.cpp PoweringColAAlgorithm.hpp)
+        PoweringColAAlgorithm.cpp PoweringColAAlgorithm.hpp
+        PoweringInnerAbcAlgorithm.cpp PoweringInnerAbcAlgorithm.hpp
+        )
 target_compile_definitions(matrixmul PRIVATE -DSPDLOG_COMPILED_LIB)
 target_include_directories(matrixmul PRIVATE ${MPI_INCLUDE_PATH})
 target_include_directories(matrixmul BEFORE PRIVATE external/fmt/include external/spdlog/include)
