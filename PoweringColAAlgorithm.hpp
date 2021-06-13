@@ -18,8 +18,8 @@ class PoweringColAAlgorithm: public MatrixPoweringAlgorithm
     std::shared_ptr<SparseMatrixSplitter> splitter_;
     long problem_size_ = -1;
     SparseMatrixData a_, inbox_;
-    DenseMatrix b_;
-    DenseMatrix c_;
+    ColumnMajorMatrix b_;
+    ColumnMajorMatrix c_;
 
     int world2d_ring_prev_;
     int world2d_ring_next_;
@@ -33,7 +33,7 @@ public:
     void multiply() override;
     void swap_cb() override;
 
-    std::optional<DenseMatrix> gather_result() override;
+    std::optional<ColumnMajorMatrix> gather_result() override;
 };
 
 #endif // POWERING_COL_A_ALGORITHM_HPP

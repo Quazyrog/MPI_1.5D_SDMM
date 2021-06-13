@@ -23,7 +23,7 @@ public:
     virtual void multiply() = 0;
     virtual void swap_cb() = 0;
 
-    virtual std::optional<DenseMatrix> gather_result() = 0;
+    virtual std::optional<ColumnMajorMatrix> gather_result() = 0;
 };
 
 #endif // MATRIX_POWERING_ALGORITHM_HPP

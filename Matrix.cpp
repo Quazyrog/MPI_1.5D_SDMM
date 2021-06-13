@@ -113,7 +113,7 @@ void SparseEntry::InitMPIDataType(MPI_Datatype &type)
     MPI_Type_commit(&type);
 }
 
-void SparseDenseMultiply(const SparseMatrixData &csr_matrix, const DenseMatrix &dense_matrix, DenseMatrix &out)
+void SparseDenseMultiply(const SparseMatrixData &csr_matrix, const ColumnMajorMatrix &dense_matrix, ColumnMajorMatrix &out)
 {
     for (long dense_column = 0; dense_column < dense_matrix.columns(); ++dense_column) {
         csr_matrix.in_order_foreach_nonzero([&out, &dense_matrix, dense_column](auto r, auto c, auto v) {

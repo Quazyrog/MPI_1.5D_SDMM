@@ -23,10 +23,10 @@ class PoweringInnerABCAlgorithm: public MatrixPoweringAlgorithm
 
     size_t problem_size_;
     SparseMatrixData a_;
-    DenseMatrix b_;
+    ColumnMajorMatrix b_;
 
     void replicate_a_(MPI_Comm &layer);
-    void replicate_b_();
+    void replicate_b_(MPI_Comm &layer);
 
 public:
     explicit PoweringInnerABCAlgorithm(int c_param);
@@ -37,7 +37,7 @@ public:
     void replicate() override;
     void multiply() override;
     void swap_cb() override;
-    std::optional<DenseMatrix> gather_result() override;
+    std::optional<ColumnMajorMatrix> gather_result() override;
 };
 
 #endif // POWERING_INNER_ABC_ALGORITHM_HPP

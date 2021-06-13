@@ -209,7 +209,7 @@ static double RoundWallTime(double seconds)
     return std::round(seconds * 1'000'000) / 1'000;
 }
 
-DenseMatrix TestCompute()
+ColumnMajorMatrix TestCompute()
 {
     spdlog::info("(TEST) Reading sparse matrix from {}", Options.sparse_matrix_file.string());
     std::ifstream s{Options.sparse_matrix_file};
@@ -220,7 +220,7 @@ DenseMatrix TestCompute()
     }
     auto n = r;
     auto sparse = SparseMatrixData::BuildCSR(n, n, entries.size(), entries.data());
-    DenseMatrix dense(n, n), result(n, n);
+    ColumnMajorMatrix dense(n, n), result(n, n);
     dense.in_order_foreach([](auto r, auto c, auto &v) {
         v = generate_double(Options.dense_matrix_seed, r, c);
     });
@@ -305,7 +305,7 @@ int main(int argc, char **argv)
     multiplication_duration = MPI_Wtime() - multiplication_duration;
     spdlog::info("Multiplication completed in {}ms", RoundWallTime(multiplication_duration));
 
-    DenseMatrix result;
+    ColumnMajorMatrix result;
     if (Options.print_result || Options.verify) {
         spdlog::info("Gathering the result matrix");
         if (auto res = algorithm->gather_result()) {

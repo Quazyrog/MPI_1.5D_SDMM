@@ -72,14 +72,14 @@ void PoweringColAAlgorithm::initialize(SparseMatrixData &&sparse_part, int dense
     const auto b_part_rows = a_.columns;
 
     spdlog::info("Generating my B part of size {}x{}", b_part_rows, b_part_cols);
-    DenseMatrix b_part(b_part_rows, b_part_cols);
+    ColumnMajorMatrix b_part(b_part_rows, b_part_cols);
     const auto seed = settings_.dense_matrix_seed;
     b_part.in_order_foreach([first_column, seed](auto r, auto c, auto &v) {
         v = generate_double(seed, r, first_column + c);
     });
     std::swap(b_, b_part);
 
-    c_ = DenseMatrix(b_part_rows, b_part_cols);
+    c_ = ColumnMajorMatrix(b_part_rows, b_part_cols);
 }
 
 
@@ -213,7 +213,7 @@ void PoweringColAAlgorithm::swap_cb()
     std::swap(b_, c_);
 }
 
-std::optional<DenseMatrix> PoweringColAAlgorithm::gather_result()
+std::optional<ColumnMajorMatrix> PoweringColAAlgorithm::gather_result()
 {
     const auto total_size = problem_size_ * problem_size_;
     std::vector<double> result;
@@ -243,6 +243,6 @@ std::optional<DenseMatrix> PoweringColAAlgorithm::gather_result()
     spdlog::trace("Sent part of result: {}", VectorToString(c_.data(), c_.data() + my_send_size));
 
     if (ProcessRank == COORDINATOR_WORLD_RANK)
-        return DenseMatrix(problem_size_, problem_size_, std::move(result));
-    return std::optional<DenseMatrix>{};
+        return ColumnMajorMatrix(problem_size_, problem_size_, std::move(result));
+    return std::optional<ColumnMajorMatrix>{};
 }

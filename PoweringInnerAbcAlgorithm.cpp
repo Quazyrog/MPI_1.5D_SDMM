@@ -76,7 +76,7 @@ void PoweringInnerABCAlgorithm::initialize(SparseMatrixData &&sparse_part, const
     const auto nrows = static_cast<long>(problem_size_);
     const auto first_column = dist.offset(ProcessRank);
     const auto ncols = static_cast<long>(dist.offset(ProcessRank + 1) - first_column);
-    DenseMatrix b(nrows, ncols);
+    ColumnMajorMatrix b(nrows, ncols);
     b.in_order_foreach([first_column, dense_seed](auto r, auto c, auto &v) {
         v = generate_double(dense_seed, r, first_column + c);
     });
@@ -88,6 +88,7 @@ void PoweringInnerABCAlgorithm::replicate()
     MPI_Comm layer;
     MPI_Comm_split(MPI_COMM_WORLD, coord_ring_, ProcessRank, &layer);
     replicate_a_(layer);
+    replicate_b_(layer);
     MPI_Comm_free(&layer);
 }
 
@@ -139,7 +140,7 @@ void PoweringInnerABCAlgorithm::swap_cb()
 
 }
 
-std::optional<DenseMatrix> PoweringInnerABCAlgorithm::gather_result()
+std::optional<ColumnMajorMatrix> PoweringInnerABCAlgorithm::gather_result()
 {
-    return std::optional<DenseMatrix>();
+    return std::optional<ColumnMajorMatrix>();
 }

@@ -57,14 +57,14 @@ struct SparseMatrixData
 };
 
 
-class DenseMatrix
+class ColumnMajorMatrix
 {
     long rows_ = 0, columns_ = 0;
     std::vector<double> values_;
 
 public:
-    DenseMatrix() = default;
-    DenseMatrix(long rows, long columns, std::vector<double> &&data={}):
+    ColumnMajorMatrix() = default;
+    ColumnMajorMatrix(long rows, long columns, std::vector<double> &&data={}):
         rows_(rows),
         columns_(columns),
         values_(std::move(data))
@@ -108,7 +108,7 @@ public:
 };
 
 
-void SparseDenseMultiply(const SparseMatrixData &csr_matrix, const DenseMatrix &dense_matrix,
-                         DenseMatrix &result_accumulator);
+void SparseDenseMultiply(const SparseMatrixData &csr_matrix, const ColumnMajorMatrix &dense_matrix,
+                         ColumnMajorMatrix &result_accumulator);
 
 #endif // MATRIX_HPP
