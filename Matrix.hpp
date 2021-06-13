@@ -36,6 +36,9 @@ struct SparseMatrixData
     std::vector<long> indices;
     std::vector<double> values;
 
+    inline auto size() const
+    { return static_cast<long>(offsets.back()); }
+
     template<class Function, bool CSR=true>
     void in_order_foreach_nonzero(const Function &function) const {
         for (long row = 0; row < rows; ++row) {

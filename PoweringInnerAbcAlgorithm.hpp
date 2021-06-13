@@ -9,6 +9,7 @@ class PoweringInnerABCAlgorithm: public MatrixPoweringAlgorithm
     /// Maps (j, l) -> process_rank; j = coord_layer_, l = coord_ring_
     std::map<std::pair<int, int>, int> coords_to_rank_;
     int ring_size_;
+    int layer_size_;
     /// Number of this process in its ring (they rotate A)
     int coord_ring_;
     /// Number of this process in its layer (they replicate B and C)
@@ -23,6 +24,9 @@ class PoweringInnerABCAlgorithm: public MatrixPoweringAlgorithm
     size_t problem_size_;
     SparseMatrixData a_;
     DenseMatrix b_;
+
+    void replicate_a_(MPI_Comm &layer);
+    void replicate_b_();
 
 public:
     explicit PoweringInnerABCAlgorithm(int c_param);
