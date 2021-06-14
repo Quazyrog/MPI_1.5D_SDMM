@@ -134,19 +134,7 @@ void PoweringColAAlgorithm::multiply()
         // fixme c == 1
         // Asynchronously send sparse part now...
         std::array<MPI_Request, 6> requests;
-        MPI_Isend(a_.offsets.data(), static_cast<int>(a_.offsets.size()), MPI_LONG, world2d_ring_next_,
-                  Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD, &requests[0]);
-        MPI_Isend(a_.indices.data(), static_cast<int>(a_.offsets.back()), MPI_LONG, world2d_ring_next_,
-                  Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD, &requests[1]);
-        MPI_Isend(a_.values.data(), static_cast<int>(a_.offsets.back()), MPI_DOUBLE, world2d_ring_next_,
-                  Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD, &requests[2]);
-        // ... and asynchronously receive (note that a_ and inbox_ have the same sizes of all vectors)
-        MPI_Irecv(inbox_.offsets.data(), static_cast<int>(a_.offsets.size()), MPI_LONG, world2d_ring_prev_,
-                  Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD, &requests[3]);
-        MPI_Irecv(inbox_.indices.data(), static_cast<int>(inbox_.indices.size()), MPI_LONG, world2d_ring_prev_,
-                  Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD, &requests[4]);
-        MPI_Irecv(inbox_.values.data(), static_cast<int>(inbox_.values.size()), MPI_DOUBLE, world2d_ring_prev_,
-                  Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD, &requests[5]);
+        rotate_a_(requests.data(), world2d_ring_next_, world2d_ring_prev_);
 
         SparseDenseMultiply(a_, b_, c_);
 

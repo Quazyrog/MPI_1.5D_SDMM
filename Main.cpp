@@ -327,14 +327,12 @@ int main(int argc, char **argv)
             for (long r = 0; r < expected.rows(); ++r) {
                 for (long c = 0; c < expected.columns(); ++c) {
                     if (std::abs(result(r, c) - expected(r, c)) > EPS) {
-                        if (Options.print_result) {
-                            spdlog::warn("At position ({}, {}) value {} was expected, but {} found", r, c,
-                                         expected(r, c), result(r, c));
-                        }
                         fail = true;
+                        goto CHECK_FAIL;
                     }
                 }
             }
+            CHECK_FAIL:
 
             if (fail)
                 spdlog::error("The result seems wrong!");

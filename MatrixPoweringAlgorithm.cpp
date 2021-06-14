@@ -54,3 +54,20 @@ void MatrixPoweringAlgorithm::replicate_a_(MPI_Comm &layer, const int layer_size
     spdlog::trace("Gathered entries: {}", Debug::VectorToString(gathered_entries));
     a_ = SparseMatrixData::BuildCSR(a_.rows, a_.columns, gathered_entries.size(), gathered_entries.data());
 }
+
+void MatrixPoweringAlgorithm::rotate_a_(MPI_Request *requests, int next, int prev)
+{
+    MPI_Isend(a_.offsets.data(), static_cast<int>(a_.offsets.size()), MPI_LONG, next,
+              Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD, &requests[0]);
+    MPI_Isend(a_.indices.data(), static_cast<int>(a_.offsets.back()), MPI_LONG, next,
+              Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD, &requests[1]);
+    MPI_Isend(a_.values.data(), static_cast<int>(a_.offsets.back()), MPI_DOUBLE, next,
+              Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD, &requests[2]);
+    // ... and asynchronously receive (note that a_ and inbox_ have the same sizes of all vectors)
+    MPI_Irecv(inbox_.offsets.data(), static_cast<int>(inbox_.offsets.size()), MPI_LONG, prev,
+              Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD, &requests[3]);
+    MPI_Irecv(inbox_.indices.data(), static_cast<int>(inbox_.indices.size()), MPI_LONG, prev,
+              Tags::SPARSE_INDICES_ARRAY, MPI_COMM_WORLD, &requests[4]);
+    MPI_Irecv(inbox_.values.data(), static_cast<int>(inbox_.values.size()), MPI_DOUBLE, prev,
+              Tags::SPARSE_VALUES_ARRAY, MPI_COMM_WORLD, &requests[5]);
+}

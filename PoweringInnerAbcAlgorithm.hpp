@@ -15,6 +15,7 @@ class PoweringInnerABCAlgorithm: public MatrixPoweringAlgorithm
     /// Number of this process in its layer (they replicate B and C)
     int coord_layer_;
 
+    MPI_Comm ring_comm_;
     MPI_Comm layer_comm_;
     int ring_prev_rank_;
     int ring_next_rank_;
@@ -23,7 +24,12 @@ class PoweringInnerABCAlgorithm: public MatrixPoweringAlgorithm
 
     size_t problem_size_;
     int seed_;
-    ColumnMajorMatrix b_;
+    ColumnMajorMatrix b_, c_;
+
+    constexpr int coord_layer_of_(int rank)
+    { return rank % layer_size_; }
+    constexpr int coord_ring_of_(int rank)
+    { return rank / layer_size_; }
 
     void replicate_b_(MPI_Comm &layer);
 

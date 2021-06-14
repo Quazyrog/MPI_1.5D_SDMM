@@ -37,21 +37,29 @@ public:
 PoweringInnerABCAlgorithm::PoweringInnerABCAlgorithm(const int c_param)
 {
     // Initialize coords_to_rank_
+    layer_size_ = c_param;
     for (int r = 0; r < NumberOfProcesses; ++r) {
-        const int j = r / c_param;
-        const int l = r % c_param;
+        const int j = coord_ring_of_(r);
+        const int l = coord_layer_of_(r);
         coords_to_rank_[{j, l}] = r;
     }
 
     // Initialize communication data
-    layer_size_ = c_param;
     ring_size_ = NumberOfProcesses / c_param;
-    coord_ring_ = ProcessRank / c_param;
-    coord_layer_ = ProcessRank % c_param;
+    coord_ring_ = coord_ring_of_(ProcessRank);
+    coord_layer_ = coord_layer_of_(ProcessRank);
     number_of_phases_ = NumberOfProcesses / (c_param * c_param);
     ring_prev_rank_ = coords_to_rank_.at({(coord_ring_ + 1) % ring_size_, coord_layer_});
     ring_next_rank_ = coords_to_rank_.at({(coord_ring_ + ring_size_ - 1) % ring_size_, coord_layer_});
-    MPI_Comm_split(MPI_COMM_WORLD, coord_layer_, ProcessRank, &layer_comm_);
+
+    // Split communicators
+    int new_rank;
+    MPI_Comm_split(MPI_COMM_WORLD, coord_layer_, coord_ring_, &ring_comm_);
+    MPI_Comm_rank(ring_comm_, &new_rank);
+    assert(new_rank == coord_ring_);
+    MPI_Comm_split(MPI_COMM_WORLD, coord_ring_, coord_layer_, &layer_comm_);
+    MPI_Comm_rank(layer_comm_, &new_rank);
+    assert(new_rank == coord_layer_);
 
     spdlog::info("Cartesian coordinates: (ring={}, layer={}); in the ring prev={}, next={}", coord_ring_, coord_layer_,
                  ring_prev_rank_, ring_next_rank_);
@@ -59,6 +67,7 @@ PoweringInnerABCAlgorithm::PoweringInnerABCAlgorithm(const int c_param)
 
 PoweringInnerABCAlgorithm::~PoweringInnerABCAlgorithm()
 {
+    MPI_Comm_free(&ring_comm_);
     MPI_Comm_free(&layer_comm_);
 }
 
@@ -90,16 +99,9 @@ void PoweringInnerABCAlgorithm::initialize(SparseMatrixData &&sparse_part, const
 
 void PoweringInnerABCAlgorithm::replicate()
 {
-    MPI_Comm layer;
-    MPI_Comm_split(MPI_COMM_WORLD, coord_ring_, ProcessRank, &layer);
-    replicate_a_(layer, layer_size_, coord_ring_);
-    replicate_b_(layer);
-    MPI_Comm_free(&layer);
-
-    MPI_Comm ring;
-    MPI_Comm_split(MPI_COMM_WORLD, coord_layer_, ProcessRank, &ring);
-    init_inbox_(ring);
-    MPI_Comm_free(&ring);
+    replicate_a_(layer_comm_, layer_size_, coord_ring_);
+    replicate_b_(layer_comm_);
+    init_inbox_(ring_comm_);
 }
 
 void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
@@ -113,7 +115,7 @@ void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
     sizes.reserve(layer_size_);
 
     // Compute sizes and offsets
-    const int first_in_layer = ProcessRank - (ProcessRank % layer_size_);
+    const int first_in_layer = ProcessRank - coord_layer_;
     const int first_out_layer = first_in_layer + layer_size_;
     for (int proc = first_in_layer; proc <= first_out_layer; ++proc) {
         const int size = static_cast<int>(cols_dist.offset(proc + 1) - cols_dist.offset(proc))
@@ -134,6 +136,7 @@ void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
     // Combine received data into B (it is column major order, so it works)
     const int n_cols = static_cast<int>(cols_dist.offset(first_out_layer) - cols_dist.offset(first_in_layer));
     b_ = ColumnMajorMatrix(static_cast<int>(problem_size_), n_cols, std::move(gathered_data));
+    c_ = ColumnMajorMatrix(static_cast<int>(problem_size_), n_cols);
 
     // Check the data
     if constexpr(Debug::ENABLED) {
@@ -152,15 +155,66 @@ void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
 
 void PoweringInnerABCAlgorithm::multiply()
 {
+    c_.in_order_foreach([](auto, auto, auto &v) {
+        v = 0;
+    });
 
+    for (int phase = 0; phase < number_of_phases_; ++phase) {
+        spdlog::info("Multiplication phase {} of {} started", phase + 1, number_of_phases_);
+        std::array<MPI_Request, 6> requests;
+        rotate_a_(requests.data(), ring_next_rank_, ring_prev_rank_);
+
+        SparseDenseMultiply(a_, b_, c_);
+
+        MPI_Waitall(static_cast<int>(requests.size()), requests.data(), MPI_STATUSES_IGNORE);
+        std::swap(a_, inbox_);
+    }
+
+    MPI_Allreduce(MPI_IN_PLACE, c_.data(), static_cast<int>(c_.size()), MPI_DOUBLE, MPI_SUM, layer_comm_);
 }
 
 void PoweringInnerABCAlgorithm::swap_cb()
 {
-
+    std::swap(b_, c_);
 }
 
 std::optional<ColumnMajorMatrix> PoweringInnerABCAlgorithm::gather_result()
 {
+    std::vector<double> result_data;
+    std::vector<int> sizes, offsets;
+    if (ProcessRank == COORDINATOR_WORLD_RANK) {
+        result_data.resize(problem_size_ * problem_size_);
+
+        // Now we need to compute sizes for all layers
+        sizes.resize(ring_size_, 0);
+        DataDistribution1D dist(problem_size_, NumberOfProcesses);
+        for (int proc = 0; proc < NumberOfProcesses; ++proc) {
+            const auto proc_layer = coord_ring_of_(proc);
+            sizes[proc_layer] += static_cast<int>(dist.offset(proc + 1) - dist.offset(proc));
+        }
+        for (auto &size: sizes)
+            size *= static_cast<int>(problem_size_);
+
+        // And from them we compute offsets
+        int total_size = 0;
+        offsets.reserve(sizes.size());
+        for (auto &size: sizes) {
+            offsets.push_back(total_size);
+            total_size += size;
+        }
+        assert(total_size == result_data.size());
+        spdlog::trace("Gather sizes are: {}", Debug::VectorToString(sizes));
+    }
+
+    if (coord_layer_ == coord_layer_of_(COORDINATOR_WORLD_RANK)) {
+        spdlog::debug("Gathering result from {} to {}", coord_ring_, coord_ring_of_(COORDINATOR_WORLD_RANK));
+        MPI_Gatherv(c_.data(), static_cast<int>(c_.size()), MPI_DOUBLE,
+                    result_data.data(), sizes.data(), offsets.data(), MPI_DOUBLE,
+                    coord_ring_of_(COORDINATOR_WORLD_RANK), ring_comm_);
+        spdlog::debug("Done!");
+    }
+
+    if (ProcessRank == COORDINATOR_WORLD_RANK)
+        return ColumnMajorMatrix(static_cast<long>(problem_size_), static_cast<long>(problem_size_), std::move(result_data));
     return std::optional<ColumnMajorMatrix>();
 }
