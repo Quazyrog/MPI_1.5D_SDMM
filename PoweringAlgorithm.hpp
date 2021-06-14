@@ -11,7 +11,7 @@ public:
     virtual void free() = 0;
 };
 
-class MatrixPoweringAlgorithm
+class PoweringAlgorithm
 {
 protected:
     SparseMatrixData inbox_, a_;
@@ -20,7 +20,7 @@ protected:
     void rotate_a_(MPI_Request *requests, int next, int prev);
 
 public:
-    virtual ~MatrixPoweringAlgorithm() = default;
+    virtual ~PoweringAlgorithm() = default;
 
     virtual std::shared_ptr<SparseMatrixSplitter> init_splitter(long sparse_rows, long sparse_columns) = 0;
     virtual void initialize(SparseMatrixData &&sparse_part, int dense_seed) = 0;

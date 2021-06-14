@@ -1,10 +1,10 @@
 #ifndef POWERING_INNER_ABC_ALGORITHM_HPP
 #define POWERING_INNER_ABC_ALGORITHM_HPP
 #include "Commons.hpp"
-#include "MatrixPoweringAlgorithm.hpp"
+#include "PoweringAlgorithm.hpp"
 
 /// InnerABC based algorithm as describen in Enlightnment.py :)
-class PoweringInnerABCAlgorithm: public MatrixPoweringAlgorithm
+class PoweringInnerABCAlgorithm: public PoweringAlgorithm
 {
     /// Maps (j, l) -> process_rank; j = coord_layer_, l = coord_ring_
     std::map<std::pair<int, int>, int> coords_to_rank_;

@@ -1,5 +1,5 @@
 #include "densematgen.h"
-#include "PoweringColAAlgorithm.hpp"
+#include "PoweringAlgorithmColA.hpp"
 #include "Commons.hpp"
 #include "Debug.hpp"
 
@@ -50,11 +50,11 @@ public:
 };
 }
 
-PoweringColAAlgorithm::PoweringColAAlgorithm(const ColASettings &settings):
+PoweringAlgorithmColA::PoweringAlgorithmColA(const ColASettings &settings):
     settings_(settings)
 {}
 
-std::shared_ptr<SparseMatrixSplitter> PoweringColAAlgorithm::init_splitter(long sparse_rows, long sparse_columns)
+std::shared_ptr<SparseMatrixSplitter> PoweringAlgorithmColA::init_splitter(long sparse_rows, long sparse_columns)
 {
     if (splitter_ == nullptr) {
         assert(sparse_rows == sparse_columns);
@@ -65,7 +65,7 @@ std::shared_ptr<SparseMatrixSplitter> PoweringColAAlgorithm::init_splitter(long 
     return splitter_;
 }
 
-void PoweringColAAlgorithm::initialize(SparseMatrixData &&sparse_part, int dense_seed)
+void PoweringAlgorithmColA::initialize(SparseMatrixData &&sparse_part, int dense_seed)
 {
     a_ = std::move(sparse_part);
     DataDistribution1D b_distribution(a_.rows, NumberOfProcesses);
@@ -85,7 +85,7 @@ void PoweringColAAlgorithm::initialize(SparseMatrixData &&sparse_part, int dense
 }
 
 
-void PoweringColAAlgorithm::replicate()
+void PoweringAlgorithmColA::replicate()
 {
     const int p = NumberOfProcesses;
     // Layer := set of processes having the same part of A (this naming is inconsistent with InnerABC :( )
@@ -114,7 +114,7 @@ void PoweringColAAlgorithm::replicate()
 
 }
 
-void PoweringColAAlgorithm::multiply()
+void PoweringAlgorithmColA::multiply()
 {
     assert(a_.columns == inbox_.columns);
     assert(a_.rows == inbox_.rows);
@@ -146,13 +146,13 @@ void PoweringColAAlgorithm::multiply()
     }
 }
 
-void PoweringColAAlgorithm::swap_cb()
+void PoweringAlgorithmColA::swap_cb()
 {
     spdlog::debug("Swapping C and B for next multiplication");
     std::swap(b_, c_);
 }
 
-std::optional<ColumnMajorMatrix> PoweringColAAlgorithm::gather_result()
+std::optional<ColumnMajorMatrix> PoweringAlgorithmColA::gather_result()
 {
     const auto total_size = problem_size_ * problem_size_;
     std::vector<double> result;

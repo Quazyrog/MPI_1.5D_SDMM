@@ -1,4 +1,4 @@
-#include "PoweringInnerAbcAlgorithm.hpp"
+#include "PoweringAlgorithmInnerAbc.hpp"
 #include "densematgen.h"
 #include "Commons.hpp"
 #include "Debug.hpp"

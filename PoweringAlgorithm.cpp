@@ -1,7 +1,7 @@
-#include "MatrixPoweringAlgorithm.hpp"
+#include "PoweringAlgorithm.hpp"
 #include "Debug.hpp"
 
-void MatrixPoweringAlgorithm::init_inbox_(MPI_Comm &ring)
+void PoweringAlgorithm::init_inbox_(MPI_Comm &ring)
 {
     int combined_size = static_cast<int>(a_.size());
     int max_combined_size;
@@ -17,7 +17,7 @@ void MatrixPoweringAlgorithm::init_inbox_(MPI_Comm &ring)
     a_.values.resize(max_combined_size);
 }
 
-void MatrixPoweringAlgorithm::replicate_a_(MPI_Comm &layer, const int layer_size, const int layer_num)
+void PoweringAlgorithm::replicate_a_(MPI_Comm &layer, const int layer_size, const int layer_num)
 {
     // Gather sizes
     std::vector<int> sizes(layer_size);
@@ -55,7 +55,7 @@ void MatrixPoweringAlgorithm::replicate_a_(MPI_Comm &layer, const int layer_size
     a_ = SparseMatrixData::BuildCSR(a_.rows, a_.columns, gathered_entries.size(), gathered_entries.data());
 }
 
-void MatrixPoweringAlgorithm::rotate_a_(MPI_Request *requests, int next, int prev)
+void PoweringAlgorithm::rotate_a_(MPI_Request *requests, int next, int prev)
 {
     MPI_Isend(a_.offsets.data(), static_cast<int>(a_.offsets.size()), MPI_LONG, next,
               Tags::SPARSE_OFFSETS_ARRAY, MPI_COMM_WORLD, &requests[0]);

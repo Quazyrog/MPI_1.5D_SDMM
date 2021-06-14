@@ -10,10 +10,10 @@
 #include <unistd.h>
 #include "Commons.hpp"
 #include "Matrix.hpp"
-#include "MatrixPoweringAlgorithm.hpp"
-#include "PoweringColAAlgorithm.hpp"
+#include "PoweringAlgorithm.hpp"
+#include "PoweringAlgorithmColA.hpp"
 #include "densematgen.h"
-#include "PoweringInnerAbcAlgorithm.hpp"
+#include "PoweringAlgorithmInnerAbc.hpp"
 #include "Debug.hpp"
 
 int ProcessRank, NumberOfProcesses;
@@ -130,7 +130,7 @@ void SetupLogging()
 }
 
 
-auto InitializeAlgorithm(MatrixPoweringAlgorithm &algorithm)
+auto InitializeAlgorithm(PoweringAlgorithm &algorithm)
 {
     long a_mat_size[2];
     SparseMatrixData a_part;
@@ -258,13 +258,13 @@ int main(int argc, char **argv)
     spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
 
     double initialization_duration;
-    MatrixPoweringAlgorithm *algorithm;
+    PoweringAlgorithm *algorithm;
     try {
         if (Options.used_algorithm == ProgramOptions::D15_COL_A) {
             ColASettings settings;
             settings.dense_matrix_seed = Options.dense_matrix_seed;
             settings.c_param = Options.replication_group_size;
-            algorithm = new PoweringColAAlgorithm(settings);
+            algorithm = new PoweringAlgorithmColA(settings);
         } else {
             algorithm = new PoweringInnerABCAlgorithm(Options.replication_group_size);
         }
