@@ -17,7 +17,6 @@ class PoweringColAAlgorithm: public MatrixPoweringAlgorithm
     ColASettings settings_;
     std::shared_ptr<SparseMatrixSplitter> splitter_;
     long problem_size_ = -1;
-    SparseMatrixData a_, inbox_;
     ColumnMajorMatrix b_;
     ColumnMajorMatrix c_;
 

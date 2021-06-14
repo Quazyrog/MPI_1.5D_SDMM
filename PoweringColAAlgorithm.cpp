@@ -88,9 +88,9 @@ void PoweringColAAlgorithm::initialize(SparseMatrixData &&sparse_part, int dense
 void PoweringColAAlgorithm::replicate()
 {
     const int p = NumberOfProcesses;
-    // Layer := set of processes having the same part of A
+    // Layer := set of processes having the same part of A (this naming is inconsistent with InnerABC :( )
     const int layer_size = settings_.c_param;
-    // Ring := set of processes that rotate parts of A during multiplication
+    // Ring := set of processes that rotate parts of A during multiplication (this naming is inconsistent with InnerABC :( )
     const int ring_size = p / layer_size;
 
     // Do the math - what is the number of next process in ring  and layer
@@ -102,67 +102,16 @@ void PoweringColAAlgorithm::replicate()
     spdlog::info("coordinates=({}, {}), prev={}, next={}", my_layer_num, my_ring_num, world2d_ring_prev_,
                  world2d_ring_next_);
 
-    // *** REPLICATE A ***
-    // Create temporary communicator for this replication layer
     MPI_Comm layer;
     MPI_Comm_split(MPI_COMM_WORLD, my_layer_num, ProcessRank, &layer);
-
-    // Determine size of combined parts of sparse matrix in this layer and offsets to place them in buffer
-    int local_size = static_cast<int>(a_.values.size());
-    std::vector<int> all_sizes(layer_size);
-    MPI_Allgather(&local_size, 1, MPI_INT, all_sizes.data(), 1, MPI_INT, layer);
-    int combined_size = 0;
-    std::vector<int> all_offsets;
-    all_offsets.reserve(layer_size);
-    for (const auto s: all_sizes) {
-        all_offsets.push_back(combined_size);
-        combined_size += s;
-    }
-
-    // Serialize the sparse matrix into triples
-    std::vector<SparseEntry> local_triples;
-    local_triples.reserve(a_.values.size());
-    a_.in_order_foreach_nonzero([&local_triples](auto r, auto c, auto v){
-        local_triples.push_back({r, c, v});
-    });
-    assert(local_triples.size() == local_size);
-
-    // Gather all triples within this layer
-    MPI_Datatype triple_data_type;
-    SparseEntry::InitMPIDataType(triple_data_type);
-    std::vector<SparseEntry> combined_triples(combined_size);
-    /* this v at the end of MPI_Allgatherv is really an annoying one... */
-    MPI_Allgatherv(local_triples.data(), static_cast<int>(local_triples.size()), triple_data_type,
-                   combined_triples.data(), all_sizes.data(), all_offsets.data(), triple_data_type,
-                   layer);
-    spdlog::info("Replication layer {} has {} sparse entries", my_layer_num, combined_size);
-    spdlog::trace("Gathered sparse entries: {}", Debug::VectorToString(combined_triples));
-
-    // Finally construct the A matrix
-    assert(combined_size == combined_triples.size());
-    a_ = SparseMatrixData::BuildCSR(a_.rows, a_.columns, combined_triples.size(), combined_triples.data());
-    MPI_Type_free(&triple_data_type);
+    replicate_a_(layer, layer_size, my_layer_num);
     MPI_Comm_free(&layer);
 
-    // *** PREPARE INBOX FOR ROTATING A ***
-    // Create communicator for this ring
     MPI_Comm ring;
     MPI_Comm_split(MPI_COMM_WORLD, my_ring_num, ProcessRank, &ring);
-
-    // Compute maximal size of sparse part within the ring
-    int max_combined_size;
-    MPI_Allreduce(&combined_size, &max_combined_size, 1, MPI_INT, MPI_MAX, ring);
-
+    init_inbox_(ring);
     MPI_Comm_free(&ring);
 
-    // Initialize inbox structure
-    inbox_.rows = a_.rows;
-    inbox_.columns = a_.columns;
-    inbox_.offsets.resize(a_.offsets.size());
-    inbox_.indices.resize(max_combined_size);
-    a_.indices.resize(max_combined_size);
-    inbox_.values.resize(max_combined_size);
-    a_.values.resize(max_combined_size);
 }
 
 void PoweringColAAlgorithm::multiply()

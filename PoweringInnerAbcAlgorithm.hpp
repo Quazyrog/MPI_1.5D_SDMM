@@ -23,10 +23,8 @@ class PoweringInnerABCAlgorithm: public MatrixPoweringAlgorithm
 
     size_t problem_size_;
     int seed_;
-    SparseMatrixData a_;
     ColumnMajorMatrix b_;
 
-    void replicate_a_(MPI_Comm &layer);
     void replicate_b_(MPI_Comm &layer);
 
 public:

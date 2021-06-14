@@ -13,6 +13,11 @@ public:
 
 class MatrixPoweringAlgorithm
 {
+protected:
+    SparseMatrixData inbox_, a_;
+    void init_inbox_(MPI_Comm &ring);
+    void replicate_a_(MPI_Comm &layer, int layer_size, int layer_num);
+
 public:
     virtual ~MatrixPoweringAlgorithm() = default;
 

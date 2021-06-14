@@ -18,7 +18,7 @@ add_executable(matrixmul Main.cpp
         Debug.hpp
         Matrix.cpp Matrix.hpp
         densematgen.cpp densematgen.h
-        MatrixPoweringAlgorithm.hpp
+        MatrixPoweringAlgorithm.hpp MatrixPoweringAlgorithm.cpp
         PoweringColAAlgorithm.cpp PoweringColAAlgorithm.hpp
         PoweringInnerAbcAlgorithm.cpp PoweringInnerAbcAlgorithm.hpp
         )
