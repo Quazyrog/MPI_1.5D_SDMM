@@ -1,5 +1,6 @@
 #ifndef ZADANIE__DEBUG_HPP
 #define ZADANIE__DEBUG_HPP
+#include <sstream>
 
 namespace Debug {
 
@@ -8,7 +9,7 @@ constexpr bool ENABLED = true;
 template<class TIter>
 std::string VectorToString(TIter begin, TIter end)
 {
-    if constexpr (ENABLED) {
+    if (ENABLED) {
         std::stringstream s;
         s << "[";
         bool comma = false;

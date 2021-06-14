@@ -32,8 +32,8 @@ public:
     void multiply() override;
     void swap_cb() override;
 
-    std::optional<ColumnMajorMatrix> gather_result() override;
-    std::optional<long> count_ge(double compare_value) override;
+    ColumnMajorMatrix gather_result() override;
+    long count_ge(double comparedouble_value) override;
 };
 
 #endif // POWERING_COL_A_ALGORITHM_HPP

@@ -152,7 +152,7 @@ void PoweringAlgorithmColA::swap_cb()
     std::swap(b_, c_);
 }
 
-std::optional<ColumnMajorMatrix> PoweringAlgorithmColA::gather_result()
+ColumnMajorMatrix PoweringAlgorithmColA::gather_result()
 {
     const auto total_size = problem_size_ * problem_size_;
     std::vector<double> result;
@@ -183,10 +183,10 @@ std::optional<ColumnMajorMatrix> PoweringAlgorithmColA::gather_result()
 
     if (ProcessRank == COORDINATOR_WORLD_RANK)
         return ColumnMajorMatrix(problem_size_, problem_size_, std::move(result));
-    return std::optional<ColumnMajorMatrix>{};
+    return ColumnMajorMatrix{};
 }
 
-std::optional<long> PoweringAlgorithmColA::count_ge(const double compare_value)
+long PoweringAlgorithmColA::count_ge(const double compare_value)
 {
     long counter = 0;
     c_.in_order_foreach([&counter, compare_value](auto, auto, auto value) {
@@ -196,7 +196,5 @@ std::optional<long> PoweringAlgorithmColA::count_ge(const double compare_value)
 
     long total = 0;
     MPI_Reduce(&counter, &total, 1, MPI_LONG, MPI_SUM, COORDINATOR_WORLD_RANK, MPI_COMM_WORLD);
-    if (ProcessRank == COORDINATOR_WORLD_RANK)
-        return total;
-    return std::optional<long>();
+    return total;
 }

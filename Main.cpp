@@ -8,6 +8,7 @@
 #include <fstream>
 #include <spdlog/sinks/ansicolor_sink.h>
 #include <unistd.h>
+#include <iomanip>
 #include "Commons.hpp"
 #include "Matrix.hpp"
 #include "PoweringAlgorithm.hpp"
@@ -65,7 +66,8 @@ ProgramOptions ParseCommandLineOptions(const int argc, char **argv)
                 auto val = std::stod(s, &pos);
                 if (pos != s.length())
                     throw std::invalid_argument("invalid numeral");
-                options.print_ge_count = val;
+                options.print_ge_count = true;
+                options.count_compare_number = val;
             } catch (std::exception &e) {
                 throw CommandLineError("invalid double literal '{}' for option -g: {}", s, e.what());
             }
@@ -141,8 +143,11 @@ auto InitializeAlgorithm(PoweringAlgorithm &algorithm)
 
         // Prepare A data as triples
         std::ifstream s{Options.sparse_matrix_file};
-        auto [mat_rows, mat_cols, mat_data] = SparseMatrixData::ReadCSRFile(s);
-        spdlog::info("Read {} entries from CSR file '{}'", mat_data.size(), Options.sparse_matrix_file.string());
+        auto the_thing = SparseMatrixData::ReadCSRFile(s);
+        auto mat_rows = std::get<0>(the_thing);
+        auto mat_cols = std::get<1>(the_thing);
+        auto &mat_data = std::get<2>(the_thing);
+        spdlog::info("Read {} entries from CSR file '{}'", mat_data.size(), Options.sparse_matrix_file);
         auto splitter = algorithm.init_splitter(static_cast<long>(mat_rows), static_cast<long>(mat_cols));
         splitter->assign_matrix_data(static_cast<long>(mat_rows), static_cast<long>(mat_cols), std::move(mat_data));
 
@@ -155,7 +160,9 @@ auto InitializeAlgorithm(PoweringAlgorithm &algorithm)
         // Distribute the sparse matrix A
         for (int proc = 0; proc < NumberOfProcesses; ++proc) {
             // Construct and send the matrix in CSR representation
-            auto [entries, count] = splitter->range_of(proc);
+            auto a_thing = splitter->range_of(proc);
+            auto entries = std::get<0>(a_thing);
+            auto count = std::get<1>(a_thing);
             spdlog::trace("Initial part of process {} is: {}", proc, Debug::VectorToString(entries, entries + count));
             auto mat_part = SparseMatrixData::BuildCSR(static_cast<long>(mat_rows), static_cast<long>(mat_cols),
                                                        count, entries);
@@ -212,9 +219,12 @@ static double RoundWallTime(double seconds)
 
 ColumnMajorMatrix TestCompute()
 {
-    spdlog::info("(TEST) Reading sparse matrix from {}", Options.sparse_matrix_file.string());
+    spdlog::info("(TEST) Reading sparse matrix from {}", Options.sparse_matrix_file);
     std::ifstream s{Options.sparse_matrix_file};
-    auto [r, c, entries] = SparseMatrixData::ReadCSRFile(s);
+    auto that_thing = SparseMatrixData::ReadCSRFile(s);
+    auto r = std::get<0>(that_thing);
+    auto c = std::get<1>(that_thing);
+    auto &entries = std::get<2>(that_thing);
     if (r != c) {
         spdlog::critical("(TEST) Sparse matrix was supposed to be square, not {}x{}!", r, c);
         MPI_Abort(MPI_COMM_WORLD, 1);
@@ -252,7 +262,7 @@ int main(int argc, char **argv)
     }
     SetupLogging();
     spdlog::info("Built: {} {}", __DATE__, __TIME__);
-    if constexpr (Debug::ENABLED)
+    if (Debug::ENABLED)
         spdlog::warn("THIS BUILD HAS ENABLED DEBUG FUNCTIONALITY THAT IS BAD FOR PERFORMANCE!");
     spdlog::info("My PID is {}", getpid());
     spdlog::info("Running on {} tasks; coordinator rank is {}", NumberOfProcesses, COORDINATOR_WORLD_RANK);
@@ -276,8 +286,7 @@ int main(int argc, char **argv)
         initialization_duration = MPI_Wtime() - initialization_duration;
         spdlog::info("Initialization completed in {}ms", RoundWallTime(initialization_duration));
     } catch (CSRReadError &e) {
-        spdlog::critical("Unable to read CSR file {} with A matrix: {}", Options.sparse_matrix_file.string(),
-                         e.message());
+        spdlog::critical("Unable to read CSR file {} with A matrix: {}", Options.sparse_matrix_file, e.message());
         MPI_Abort(MPI_COMM_WORLD, 1);
     } catch (std::exception &e) {
         spdlog::critical("Failed to initialize the algorithm: {}", e.what());
@@ -311,10 +320,7 @@ int main(int argc, char **argv)
     ColumnMajorMatrix result;
     if (Options.print_result || Options.verify) {
         spdlog::info("Gathering the result matrix");
-        if (auto res = algorithm->gather_result()) {
-            spdlog::info("I have entire result matrix");
-            result = *res;
-        }
+        result = algorithm->gather_result();
     }
 
     if (ProcessRank == COORDINATOR_WORLD_RANK) {
@@ -375,8 +381,9 @@ int main(int argc, char **argv)
     }
 
     if (Options.print_ge_count) {
-        if (auto ge_count = algorithm->count_ge(*Options.print_ge_count))
-            std::cout << *ge_count << std::endl;
+        auto ge_count = algorithm->count_ge(Options.count_compare_number);
+        if (ProcessRank == COORDINATOR_WORLD_RANK)
+            std::cout << ge_count << std::endl;
     }
 
     spdlog::info("So Long, and Thanks for All the Fish!");

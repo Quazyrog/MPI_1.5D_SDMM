@@ -5,9 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 find_package(MPI REQUIRED)
 add_subdirectory(external/fmt)
-find_package(fmt REQUIRED)
 add_subdirectory(external/spdlog)
-find_package(spdlog REQUIRED)
 
 
 add_executable(generator generator_main.cpp densematgen.cpp densematgen.h)

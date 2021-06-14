@@ -1,7 +1,6 @@
 #ifndef COMMONS_HPP
 #define COMMONS_HPP
 
-#include <filesystem>
 #include <optional>
 #include <algorithm>
 #include <mpi.h>
@@ -15,14 +14,15 @@ struct ProgramOptions
 {
     enum Algorithm { D15_COL_A, D15_INNER_ABC };
 
-    std::filesystem::path sparse_matrix_file;
+    std::string sparse_matrix_file;
     int dense_matrix_seed;
     int replication_group_size;
     int exponent;
     Algorithm used_algorithm = D15_COL_A;
 
     bool print_result = false;
-    std::optional<double> print_ge_count;
+    bool print_ge_count;
+    double count_compare_number = false;
 
     spdlog::level::level_enum stderr_log_level = spdlog::level::level_enum::info;
     std::string log_file_path;
@@ -65,7 +65,7 @@ protected:
     std::string _what = "Error";
 
     template<class ...Args>
-    Error(const char *class_name, std::string_view format, Args... args):
+    Error(const char *class_name, const char *format, Args... args):
         _message(fmt::format(format, std::forward<Args>(args)...))
     {
             _what = class_name + (": " + _message);
@@ -80,7 +80,7 @@ class CommandLineError: public Error
 {
 public:
     template<class ...Args>
-    explicit CommandLineError(std::string_view format, Args... args):
+    explicit CommandLineError(const char *format, Args... args):
         Error("CommandLineError", format, std::forward<Args>(args)...)
     {}
 };
@@ -89,19 +89,19 @@ public:
 class IOError: public Error
 {
 protected:
-    std::filesystem::path file_name_;
+    std::string file_name_;
 
     using Error::Error;
 
 public:
     template<class ...Args>
-    explicit IOError(std::string_view format, Args... args):
+    explicit IOError(const char *format, Args... args):
         Error("IOError", format, std::forward<Args>(args)...)
     {}
 
     const auto &file_name() const
     { return file_name_; }
-    void set_file_name(std::filesystem::path fn)
+    void set_file_name(std::string fn)
     { file_name_ = std::move(fn); }
 };
 
@@ -109,7 +109,7 @@ class ValueError: public Error
 {
 public:
     template<class ...Args>
-    explicit ValueError(std::string_view format, Args... args):
+    explicit ValueError(const char *format, Args... args):
         Error("ValueError", format, std::forward<Args>(args)...)
     {}
 };
@@ -118,7 +118,7 @@ class NotImplementedError: public Error
 {
 public:
     template<class ...Args>
-    explicit NotImplementedError(std::string_view format, Args... args):
+    explicit NotImplementedError(const char *format, Args... args):
         Error("NotImplementedError", format, std::forward<Args>(args)...)
     {}
 };
@@ -141,7 +141,7 @@ public:
     }
 
     template<class ...Args>
-    explicit MPIError(std::string_view format, Args... args):
+    explicit MPIError(const char *format, Args... args):
         Error("MPIError", format, std::forward<Args>(args)...)
     {}
 
@@ -151,7 +151,7 @@ public:
         code_(error_code)
     {}
 
-    [[nodiscard]] std::string error_string() const
+    std::string error_string() const
     {
         return ErrorString(code_);
     }

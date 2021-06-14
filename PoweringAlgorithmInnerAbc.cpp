@@ -140,7 +140,7 @@ void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
     c_ = ColumnMajorMatrix(static_cast<int>(problem_size_), n_cols);
 
     // Check the data
-    if constexpr(Debug::ENABLED) {
+    if (Debug::ENABLED) {
         const auto first_column = cols_dist.offset(first_in_layer);
         b_.in_order_foreach([this, first_column](auto r, auto c, auto v) {
             c += first_column;
@@ -196,7 +196,7 @@ void PoweringInnerABCAlgorithm::swap_cb()
     std::swap(b_, c_);
 }
 
-std::optional<ColumnMajorMatrix> PoweringInnerABCAlgorithm::gather_result()
+ColumnMajorMatrix PoweringInnerABCAlgorithm::gather_result()
 {
     std::vector<double> result_data;
     std::vector<int> sizes, offsets;
@@ -234,13 +234,13 @@ std::optional<ColumnMajorMatrix> PoweringInnerABCAlgorithm::gather_result()
 
     if (ProcessRank == COORDINATOR_WORLD_RANK)
         return ColumnMajorMatrix(static_cast<long>(problem_size_), static_cast<long>(problem_size_), std::move(result_data));
-    return std::optional<ColumnMajorMatrix>();
+    return ColumnMajorMatrix{};
 }
 
-std::optional<long> PoweringInnerABCAlgorithm::count_ge(double compare_value)
+long PoweringInnerABCAlgorithm::count_ge(double compare_value)
 {
     if (coord_layer_ != coord_layer_of_(COORDINATOR_WORLD_RANK))
-        return std::optional<long>();
+        return 0;
 
     long counter = 0;
     c_.in_order_foreach([&counter, compare_value](auto, auto, auto value) {
@@ -252,5 +252,5 @@ std::optional<long> PoweringInnerABCAlgorithm::count_ge(double compare_value)
     MPI_Reduce(&counter, &total, 1, MPI_LONG, MPI_SUM, coord_ring_of_(COORDINATOR_WORLD_RANK), ring_comm_);
     if (ProcessRank == COORDINATOR_WORLD_RANK)
         return total;
-    return std::optional<long>();
+    return 0;
 }

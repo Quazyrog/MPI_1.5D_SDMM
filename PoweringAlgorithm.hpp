@@ -20,7 +20,8 @@ protected:
     void rotate_a_(MPI_Request *requests, int next, int prev);
 
 public:
-    virtual ~PoweringAlgorithm() = default;
+    virtual ~PoweringAlgorithm()
+    { };
 
     virtual std::shared_ptr<SparseMatrixSplitter> init_splitter(long sparse_rows, long sparse_columns) = 0;
     virtual void initialize(SparseMatrixData &&sparse_part, int dense_seed) = 0;
@@ -29,8 +30,8 @@ public:
     virtual void multiply() = 0;
     virtual void swap_cb() = 0;
 
-    virtual std::optional<ColumnMajorMatrix> gather_result() = 0;
-    virtual std::optional<long> count_ge(double compare_value) = 0;
+    virtual ColumnMajorMatrix gather_result() = 0;
+    virtual long count_ge(double compare_value) = 0;
 };
 
 #endif // MATRIX_POWERING_ALGORITHM_HPP

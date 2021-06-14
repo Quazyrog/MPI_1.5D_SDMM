@@ -105,7 +105,7 @@ class CSRReadError: public IOError
 {
 public:
     template<class ...Args>
-    explicit CSRReadError(std::string_view format, Args... args):
+    explicit CSRReadError(const char *format, Args... args):
         IOError("CSRReadError", format, std::forward<Args>(args)...)
     {}
 };
