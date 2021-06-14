@@ -32,6 +32,7 @@ class PoweringInnerABCAlgorithm: public MatrixPoweringAlgorithm
     { return rank / layer_size_; }
 
     void replicate_b_(MPI_Comm &layer);
+    void initial_shift_();
 
 public:
     explicit PoweringInnerABCAlgorithm(int c_param);

@@ -102,6 +102,7 @@ void PoweringInnerABCAlgorithm::replicate()
     replicate_a_(layer_comm_, layer_size_, coord_ring_);
     replicate_b_(layer_comm_);
     init_inbox_(ring_comm_);
+    initial_shift_();
 }
 
 void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
@@ -127,8 +128,8 @@ void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
     spdlog::debug("Gathered B parts sizes in layer {}: {}", coord_ring_, Debug::VectorToString(sizes));
 
     // Gather data of B
-    spdlog::debug("Gathering {} elements of dense matrix on layer {} (columns {} through {})", total_size, coord_ring_,
-                  cols_dist.offset(first_in_layer), cols_dist.offset(first_out_layer) - 1);
+    spdlog::debug("Gathering {} elements of dense matrix on layer {} (columns {} : {})", total_size, coord_ring_,
+                  cols_dist.offset(first_in_layer), cols_dist.offset(first_out_layer));
     std::vector<double> gathered_data(total_size);
     MPI_Allgatherv(b_.data(), static_cast<int>(b_.size()), MPI_DOUBLE,
                    gathered_data.data(), sizes.data(), offsets.data(), MPI_DOUBLE, layer);
@@ -151,6 +152,23 @@ void PoweringInnerABCAlgorithm::replicate_b_(MPI_Comm &layer)
         });
         spdlog::debug("Gathered B passed the check");
     }
+}
+
+void PoweringInnerABCAlgorithm::initial_shift_()
+{
+    const int my_shift = number_of_phases_ * coord_layer_;
+    if (my_shift == 0) {
+        spdlog::info("Initial shift by 0");
+        return;
+    }
+
+    const auto prev_rank = coords_to_rank_.at({(coord_ring_ + ring_size_ - my_shift % ring_size_) % ring_size_, coord_layer_});
+    const auto next_rank = coords_to_rank_.at({(coord_ring_ + my_shift) % ring_size_, coord_layer_});
+    std::array<MPI_Request, 6> requests;
+    rotate_a_(requests.data(), next_rank, prev_rank);
+    spdlog::info("Initial shift by {}: receive from {}, send to {}", my_shift, prev_rank, next_rank);
+    MPI_Waitall(requests.size(), requests.data(), MPI_STATUSES_IGNORE);
+    std::swap(a_, inbox_);
 }
 
 void PoweringInnerABCAlgorithm::multiply()

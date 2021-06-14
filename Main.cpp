@@ -323,16 +323,38 @@ int main(int argc, char **argv)
             auto expected = TestCompute();
             bool fail = false;
 
-            // Expected
+            if (Options.print_result)
+                std::cout << "EXPECTED:";
             for (long r = 0; r < expected.rows(); ++r) {
+                if (Options.print_result)
+                    std::cout <<"\n  ";
                 for (long c = 0; c < expected.columns(); ++c) {
                     if (std::abs(result(r, c) - expected(r, c)) > EPS) {
                         fail = true;
-                        goto CHECK_FAIL;
+                        if (Options.print_result)
+                            std::cout << "\x1b[0;32m" << std::setw(12) << expected(r, c) << "\x1b[0;0m  ";
+                    } else if (Options.print_result) {
+                        std::cout << std::setw(8) << expected(r, c) << "  ";
                     }
                 }
             }
-            CHECK_FAIL:
+            if (Options.print_result)
+                std::cout << "\nRESULT:";
+            for (long r = 0; r < expected.rows(); ++r) {
+                if (Options.print_result)
+                    std::cout <<"\n  ";
+                for (long c = 0; c < expected.columns(); ++c) {
+                    if (std::abs(result(r, c) - expected(r, c)) > EPS) {
+                        fail = true;
+                        if (Options.print_result)
+                            std::cout << "\x1b[0;31m" << std::setw(12) << result(r, c) << "\x1b[0;0m  ";
+                    } else if (Options.print_result) {
+                        std::cout << std::setw(8) << expected(r, c) << "  ";
+                    }
+                }
+            }
+            if (Options.print_result)
+                std::cout << std::endl;
 
             if (fail)
                 spdlog::error("The result seems wrong!");
