@@ -6,7 +6,7 @@
 namespace {
 class Splitter: public SparseMatrixSplitter
 {
-    std::optional<DataDistribution1D> rows_distrib_;
+    DataDistribution1D rows_distrib_{1, 1};
     std::vector<SparseEntry> entries_;
 
 public:
@@ -19,9 +19,9 @@ public:
 
     std::pair<SparseEntry *, size_t> range_of(int process_rank) override
     {
-        const auto rows_begin = static_cast<long>(rows_distrib_->offset(static_cast<size_t>(process_rank)));
+        const auto rows_begin = static_cast<long>(rows_distrib_.offset(static_cast<size_t>(process_rank)));
         auto first_elt = std::lower_bound(entries_.begin(), entries_.end(), SparseEntry{rows_begin, -1, 0}, CSROrder{});
-        const auto rows_end = static_cast<long>(rows_distrib_->offset(static_cast<size_t>(process_rank) + 1));
+        const auto rows_end = static_cast<long>(rows_distrib_.offset(static_cast<size_t>(process_rank) + 1));
         auto last_elt = std::lower_bound(entries_.begin(), entries_.end(), SparseEntry{rows_end, -1, 0}, CSROrder{});
         return {&(*first_elt), last_elt - first_elt};
     }
