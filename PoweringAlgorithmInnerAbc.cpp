@@ -236,3 +236,21 @@ std::optional<ColumnMajorMatrix> PoweringInnerABCAlgorithm::gather_result()
         return ColumnMajorMatrix(static_cast<long>(problem_size_), static_cast<long>(problem_size_), std::move(result_data));
     return std::optional<ColumnMajorMatrix>();
 }
+
+std::optional<long> PoweringInnerABCAlgorithm::count_ge(double compare_value)
+{
+    if (coord_layer_ != coord_layer_of_(COORDINATOR_WORLD_RANK))
+        return std::optional<long>();
+
+    long counter = 0;
+    c_.in_order_foreach([&counter, compare_value](auto, auto, auto value) {
+        if (value >= compare_value)
+            ++counter;
+    });
+
+    long total = 0;
+    MPI_Reduce(&counter, &total, 1, MPI_LONG, MPI_SUM, coord_ring_of_(COORDINATOR_WORLD_RANK), ring_comm_);
+    if (ProcessRank == COORDINATOR_WORLD_RANK)
+        return total;
+    return std::optional<long>();
+}

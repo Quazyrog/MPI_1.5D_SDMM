@@ -374,6 +374,11 @@ int main(int argc, char **argv)
         }
     }
 
+    if (Options.print_ge_count) {
+        if (auto ge_count = algorithm->count_ge(*Options.print_ge_count))
+            std::cout << *ge_count << std::endl;
+    }
+
     spdlog::info("So Long, and Thanks for All the Fish!");
     delete algorithm;
     MPI_Finalize();

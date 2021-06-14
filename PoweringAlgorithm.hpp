@@ -30,6 +30,7 @@ public:
     virtual void swap_cb() = 0;
 
     virtual std::optional<ColumnMajorMatrix> gather_result() = 0;
+    virtual std::optional<long> count_ge(double compare_value) = 0;
 };
 
 #endif // MATRIX_POWERING_ALGORITHM_HPP

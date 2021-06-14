@@ -44,6 +44,7 @@ public:
     void multiply() override;
     void swap_cb() override;
     std::optional<ColumnMajorMatrix> gather_result() override;
+    std::optional<long> count_ge(double compare_value) override;
 };
 
 #endif // POWERING_INNER_ABC_ALGORITHM_HPP
